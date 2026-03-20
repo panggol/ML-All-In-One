@@ -120,6 +120,7 @@ agents/
 TASKS.md
 PROGRESS.md
 CLAUDE.md
+MIRRORS.md
 experiments/
 logs/
 checkpoints/
