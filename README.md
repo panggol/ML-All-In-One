@@ -15,8 +15,8 @@
 ## 快速开始
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 安装依赖（推荐使用清华源）
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 运行示例
 python examples/train_sklearn.py
