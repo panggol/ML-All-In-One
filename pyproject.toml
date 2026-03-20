@@ -1,0 +1,189 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlkit"
+version = "0.1.0"
+description = "ML All In One - 机器学习全流程训练平台"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "ML All In One Team"}
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "scikit-learn>=1.3.0",
+    "xgboost>=2.0.0",
+    "lightgbm>=4.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "imbalanced-learn>=0.11.0",
+    "dask>=2023.0.0",
+    "polars>=0.19.0",
+    "python-multipart>=0.0.6",
+    "python-jose>=3.3.0",
+    "passlib>=1.7.4",
+    "httpx>=0.25.0",
+    "websockets>=12.0.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.12.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+    "tqdm>=4.65.0",
+    "joblib>=1.3.0",
+    "cloudpickle>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.3.0",
+]
+
+# ==================== Black 配置 ====================
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+# ==================== isort 配置 ====================
+[tool.isort]
+profile = "black"
+line_length = 88
+skip_gitignore = true
+skip_glob = [
+    ".eggs",
+    "*.egg",
+    ".git",
+    ".tox",
+    "build",
+    "dist",
+]
+
+# ==================== mypy 配置 ====================
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "torch.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "numpy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "sklearn.*"
+ignore_missing_imports = true
+
+# ==================== pytest 配置 ====================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# ==================== Ruff 配置 ====================
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "ASYNC",   # flake8-async
+]
+ignore = [
+    "E501",   # line too long (handled by Black)
+    "B008",   # do not perform function calls in argument defaults
+    "N803",   # argument names (X, y are standard in ML)
+    "N806",   # variable names (X, y are standard in ML)
+    "N812",   # lowercase functional import
+    "B024",   # abstract class without abstract methods
+    "B027",   # empty abstract methods
+    "B904",   # raise in except
+    "B905",   # zip strict
+    "F401",   # unused imports (too many false positives)
+    "F821",   # undefined name
+    "F841",   # unused variable
+    "UP035",  # deprecated typing
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mlkit"]
+
+# ==================== pre-commit 配置 ====================
+[tool.pre-commit]
+default_install_hook_types = ["pre-commit", "commit-msg"]
+default_stages = ["pre-commit"]
+
+[tool.pre-commit.hooks]
+black = {language_version = "3.10"}
+isort = {}
+ruff = {args = ["--fix"]}
+mypy = {files = "src/mlkit/"}
+
+# ==================== 编辑器配置 ====================
+[tool.vscode]
+python.defaultInterpreterPath = ".venv/bin/python"
+python.linting.enabled = true
+python.linting.pylintEnabled = false
+python.linting.flake8Enabled = false
+python.formatting.provider = "black"
+python.analysis.typeCheckingMode = "basic"
