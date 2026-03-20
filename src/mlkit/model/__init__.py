@@ -430,16 +430,31 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
         BaseModel 实例
     """
     if model_type == "sklearn":
-        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier
         from sklearn.linear_model import LinearRegression, LogisticRegression
         from sklearn.svm import SVC, SVR
 
         task = kwargs.pop("task", "classification")
 
-        if task == "classification":
-            model_class = kwargs.pop("model_class", RandomForestClassifier)
+        # 支持字符串到类的映射
+        sklearn_models = {
+            "RandomForestClassifier": RandomForestClassifier,
+            "RandomForestRegressor": RandomForestRegressor,
+            "GradientBoostingClassifier": GradientBoostingClassifier,
+            "LogisticRegression": LogisticRegression,
+            "LinearRegression": LinearRegression,
+            "SVC": SVC,
+            "SVR": SVR,
+        }
+
+        model_class_name = kwargs.pop("model_class", "RandomForestClassifier" if task == "classification" else "RandomForestRegressor")
+        
+        if isinstance(model_class_name, str):
+            if model_class_name not in sklearn_models:
+                raise ValueError(f"Unknown sklearn model: {model_class_name}. Available: {list(sklearn_models.keys())}")
+            model_class = sklearn_models[model_class_name]
         else:
-            model_class = kwargs.pop("model_class", RandomForestRegressor)
+            model_class = model_class_name
 
         return SKLearnModel(model_class(**kwargs), task_type=task)
 
