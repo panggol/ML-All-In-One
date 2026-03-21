@@ -430,7 +430,11 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
         BaseModel 实例
     """
     if model_type == "sklearn":
-        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, GradientBoostingClassifier
+        from sklearn.ensemble import (
+            GradientBoostingClassifier,
+            RandomForestClassifier,
+            RandomForestRegressor,
+        )
         from sklearn.linear_model import LinearRegression, LogisticRegression
         from sklearn.svm import SVC, SVR
 
@@ -447,11 +451,20 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
             "SVR": SVR,
         }
 
-        model_class_name = kwargs.pop("model_class", "RandomForestClassifier" if task == "classification" else "RandomForestRegressor")
-        
+        model_class_name = kwargs.pop(
+            "model_class",
+            (
+                "RandomForestClassifier"
+                if task == "classification"
+                else "RandomForestRegressor"
+            ),
+        )
+
         if isinstance(model_class_name, str):
             if model_class_name not in sklearn_models:
-                raise ValueError(f"Unknown sklearn model: {model_class_name}. Available: {list(sklearn_models.keys())}")
+                raise ValueError(
+                    f"Unknown sklearn model: {model_class_name}. Available: {list(sklearn_models.keys())}"
+                )
             model_class = sklearn_models[model_class_name]
         else:
             model_class = model_class_name

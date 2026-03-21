@@ -164,9 +164,7 @@ class ExperimentTracker:
         self.experiment.metrics[name].append(value)
         self._save_experiment(self.experiment)
 
-    def log_metrics(
-        self, metrics: dict[str, float], step: int | None = None
-    ) -> None:
+    def log_metrics(self, metrics: dict[str, float], step: int | None = None) -> None:
         """批量记录指标"""
         for name, value in metrics.items():
             self.log_metric(name, value, step)
@@ -369,7 +367,9 @@ class HyperparameterSearcher:
     """超参数搜索器"""
 
     def __init__(
-        self, experiment_dir: str, search_method: str = "grid"  # grid, random, bayesian
+        self,
+        experiment_dir: str,
+        search_method: str = "grid",  # grid, random, bayesian
     ):
         self.experiment_dir = experiment_dir
         self.search_method = search_method
