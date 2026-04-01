@@ -504,6 +504,7 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
 
         # 如果没有指定优化器，创建一个默认的
         if optimizer is None:
+            import torch
             optimizer = torch.optim.Adam(model.parameters(), lr=kwargs.get("lr", 0.001))
 
         return PyTorchModel(

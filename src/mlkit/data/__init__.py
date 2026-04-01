@@ -15,10 +15,19 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from imblearn.combine import SMOTEENN, SMOTETomek
-from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
-from imblearn.over_sampling import ADASYN, SMOTE, RandomOverSampler
-from imblearn.under_sampling import NearMiss, RandomUnderSampler, TomekLinks
+
+# imblearn 为可选依赖
+try:
+    from imblearn.combine import SMOTEENN, SMOTETomek
+    from imblearn.ensemble import BalancedBaggingClassifier, BalancedRandomForestClassifier
+    from imblearn.over_sampling import ADASYN, SMOTE, RandomOverSampler
+    from imblearn.under_sampling import NearMiss, RandomUnderSampler, TomekLinks
+    IMBLEARN_AVAILABLE = True
+except ImportError:
+    IMBLEARN_AVAILABLE = False
+    SMOTEENN = SMOTETomek = BalancedBaggingClassifier = BalancedRandomForestClassifier = None
+    ADASYN = SMOTE = RandomOverSampler = None
+    NearMiss = RandomUnderSampler = TomekLinks = None
 
 
 @dataclass
@@ -257,6 +266,12 @@ class ImbalanceHandler:
         Returns:
             (X_resampled, y_resampled)
         """
+        if not IMBLEARN_AVAILABLE:
+            raise ImportError(
+                "imbalanced-learn is required for ImbalanceHandler. "
+                "Install it with: pip install imbalanced-learn"
+            )
+        
         method_lower = method.lower()
 
         if method_lower not in cls.METHODS:
