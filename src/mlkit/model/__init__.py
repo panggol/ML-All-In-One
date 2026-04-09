@@ -196,6 +196,10 @@ class XGBoostModel(SKLearnModel):
     def __init__(self, **kwargs):
         from xgboost import XGBClassifier, XGBRegressor
 
+        # 弹出内部参数，不传递给 XGBoost
+        kwargs.pop("task", None)
+        kwargs.pop("model_class", None)
+
         # 根据任务类型选择模型
         if kwargs.get("objective", "binary:logistic").startswith(
             "binary:"
@@ -220,10 +224,12 @@ class LightGBMModel(SKLearnModel):
     def __init__(self, **kwargs):
         from lightgbm import LGBMClassifier, LGBMRegressor
 
+        # 弹出内部参数，不传递给 LightGBM
+        task = kwargs.pop("task", None)
+        kwargs.pop("model_class", None)
+
         # 根据任务类型选择模型
-        if kwargs.get("objective", "binary").startswith("binary") or kwargs.get(
-            "objective", "multiclass"
-        ).startswith("multiclass"):
+        if task == "classification":
             model = LGBMClassifier(**kwargs)
         else:
             model = LGBMRegressor(**kwargs)

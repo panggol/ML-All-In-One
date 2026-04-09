@@ -24,14 +24,14 @@ const quickActions = [
     title: '自动机器学习',
     description: '一键找到最优模型和参数',
     action: 'automl',
-    onClick: () => window.location.hash = '#/training'
+    onClick: () => window.location.href = '/training'
   },
   {
     icon: LineChart,
     title: '模型预测',
     description: '批量预测新数据',
     action: 'predict',
-    onClick: () => window.location.hash = '#/experiments'
+    onClick: () => window.location.href = '/experiments'
   },
 ]
 

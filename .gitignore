@@ -136,3 +136,4 @@ demo_data/
 .gradio/
 restart.sh
 ml_all_in_one.db
+uploads/

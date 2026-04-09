@@ -153,6 +153,7 @@ class DataLoader:
 
     def _load_csv(self, **kwargs) -> Dataset:
         """加载 CSV"""
+        target_column = kwargs.pop("target_column", None)
         if self.chunksize:
             # 分块读取并合并（适用于中等规模数据）
             chunks = []
@@ -168,17 +169,19 @@ class DataLoader:
         else:
             df = pd.read_csv(self.file_path, **kwargs)
 
-        return self._dataframe_to_dataset(df, kwargs.get("target_column"))
+        return self._dataframe_to_dataset(df, target_column)
 
     def _load_parquet(self, **kwargs) -> Dataset:
         """加载 Parquet"""
+        target_column = kwargs.pop("target_column", None)
         df = pd.read_parquet(self.file_path, **kwargs)
-        return self._dataframe_to_dataset(df, kwargs.get("target_column"))
+        return self._dataframe_to_dataset(df, target_column)
 
     def _load_json(self, **kwargs) -> Dataset:
         """加载 JSON"""
+        target_column = kwargs.pop("target_column", None)
         df = pd.read_json(self.file_path, **kwargs)
-        return self._dataframe_to_dataset(df, kwargs.get("target_column"))
+        return self._dataframe_to_dataset(df, target_column)
 
     def _load_pickle(self, **kwargs) -> Dataset:
         """加载 Pickle"""
@@ -201,6 +204,7 @@ class DataLoader:
             y = df[target_column].values
             X = df.drop(columns=[target_column]).values
             feature_names = [c for c in df.columns if c != target_column]
+            target_names = [target_column]
         else:
             # 假设最后一列是标签
             if len(df.columns) > 1:
