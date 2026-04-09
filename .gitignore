@@ -134,3 +134,5 @@ reviews/
 demo_data/
 .ruff_cache/
 .gradio/
+restart.sh
+ml_all_in_one.db

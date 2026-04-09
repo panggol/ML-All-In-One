@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
@@ -179,6 +180,15 @@ def create_inference_app(
         version="1.0.0",
     )
 
+    # 添加 CORS 中间件
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     inference_engine = InferenceEngine(model_registry)
 
     @app.get("/")
@@ -286,3 +296,7 @@ def serve_model(
     print(f"Starting inference server at http://{host}:{port}")
 
     run_inference_server(registry, model_dir, host, port)
+
+
+# 创建全局 app 对象供 uvicorn 启动
+app = create_inference_app()

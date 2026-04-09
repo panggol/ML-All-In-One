@@ -116,6 +116,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<AuthPage />} />
         <Route element={<PrivateRoute />}>
           <Route path="/dashboard" element={<Layout />} />

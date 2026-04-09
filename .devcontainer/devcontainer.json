@@ -2,9 +2,13 @@
   "name": "ML All In One",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false,
+      "dockerDashComposeVersion": "v2"
+    }
   },
-  "forwardPorts": [7860],
+  "forwardPorts": [3000],
   "postCreateCommand": "pip install -e . && pip install pytest ruff black",
   "customizations": {
     "vscode": {
