@@ -29,8 +29,18 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          set -x
+          echo "=== PWD ==="
           pwd
-          ls -la src/
-          ls -la tests/
-          pytest tests/ -v --tb=short
+          echo "=== ROOT LS ==="
+          ls -la
+          echo "=== SRC LS ==="
+          ls -la src/ || echo "src/ NOT FOUND"
+          echo "=== TESTS LS ==="
+          ls -la tests/ || echo "tests/ NOT FOUND"
+          echo "=== PYTHON PATH ==="
+          python -c "import sys; print(sys.path)"
+          echo "=== MLPATH ==="
+          echo "PYTHONPATH=$PYTHONPATH"
+          echo "=== COLLECT ==="
+          pytest tests/ --collect-only 2>&1
+          echo "=== EXIT $? ==="
