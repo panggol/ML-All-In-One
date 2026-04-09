@@ -12,23 +12,26 @@ interface ModelRecord {
 }
 
 const quickActions = [
-  { 
-    icon: Upload, 
-    title: '上传数据集', 
+  {
+    icon: Upload,
+    title: '上传数据集',
     description: '支持 CSV、Excel 格式',
-    action: 'upload'
+    action: 'upload',
+    onClick: () => document.getElementById('file-upload')?.click()
   },
-  { 
-    icon: Brain, 
-    title: '自动机器学习', 
+  {
+    icon: Brain,
+    title: '自动机器学习',
     description: '一键找到最优模型和参数',
-    action: 'automl'
+    action: 'automl',
+    onClick: () => window.location.hash = '#/training'
   },
-  { 
-    icon: LineChart, 
-    title: '模型预测', 
+  {
+    icon: LineChart,
+    title: '模型预测',
     description: '批量预测新数据',
-    action: 'predict'
+    action: 'predict',
+    onClick: () => window.location.hash = '#/experiments'
   },
 ]
 
@@ -110,7 +113,8 @@ export default function Dashboard() {
             {quickActions.map((action) => (
               <button
                 key={action.action}
-                className="w-full text-left px-4 py-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors flex items-center gap-4"
+                onClick={action.onClick}
+                className="w-full text-left px-4 py-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors flex items-center gap-4 cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
                   <action.icon className="w-5 h-5 text-primary-600" />
