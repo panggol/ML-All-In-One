@@ -1,0 +1,45 @@
+name: Minimal Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  minimal:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test pip
+        run: |
+          echo "Python: $(python --version)"
+          echo "pip: $(pip --version)"
+          echo "Disk: $(df -h / | tail -1)"
+          pip install numpy pandas scikit-learn pytest
+          echo "=== pip install OK ==="
+          PYTHONPATH=src python -c "import numpy; print('numpy:', numpy.__version__)"
+          PYTHONPATH=src python -c "import sklearn; print('sklearn:', sklearn.__version__)"
+
+      - name: Install torch CPU
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu 2>&1 | tail -20
+          echo "=== torch install done ==="
+          PYTHONPATH=src python -c "import torch; print('torch:', torch.__version__)"
+
+      - name: Install remaining
+        run: |
+          pip install xgboost lightgbm scipy imbalanced-learn dask polars \
+            fastapi uvicorn pydantic pyyaml python-multipart python-jose \
+            passlib httpx websockets sqlalchemy alembic python-dotenv \
+            loguru tqdm joblib cloudpickle pytest-cov 2>&1 | tail -20
+          echo "=== all deps installed ==="
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        run: pytest tests/ -v --tb=short 2>&1 | tail -30

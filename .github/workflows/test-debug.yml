@@ -1,8 +1,6 @@
 name: Test Debug
 
 on:
-  push:
-    branches: [master, main]
   workflow_dispatch:
 
 jobs:
@@ -18,35 +16,39 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Debug environment
+      - name: Debug env
         run: |
-          echo "=== Python version ==="
-          python --version
-          echo "=== pip version ==="
-          pip --version
-          echo "=== Working directory ==="
-          pwd
-          echo "=== ls ==="
-          ls -la
-          echo "=== src/ ==="
-          ls -la src/
-          echo "=== tests/ ==="
-          ls -la tests/
+          echo "Python: $(python --version)"
+          echo "pip: $(pip --version)"
+          echo "Disk: $(df -h / | tail -1)"
+          echo "Memory: $(free -h | head -2)"
 
-      - name: Install dependencies
+      - name: Install torch
         run: |
-          python -m pip install --upgrade pip
-          echo "=== Installing requirements ==="
-          pip install --no-cache-dir -r requirements.txt pytest 2>&1 | tail -20
-          echo "=== Verify mlkit import ==="
-          PYTHONPATH=src python -c "import mlkit; print('mlkit version:', mlkit.__version__)"
+          set +e
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu 2>&1 | tee /tmp/torch-install.log
+          echo "EXIT CODE: $?"
+          echo "=== Last 30 lines ==="
+          tail -30 /tmp/torch-install.log
 
-      - name: Run tests with full output
+      - name: Install rest
         run: |
-          echo "=== Running pytest ==="
-          PYTHONPATH=src pytest tests/ -v --tb=long 2>&1 | tee /tmp/test-output.txt
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Exit code: $EXIT_CODE ==="
-          echo "=== Last 50 lines of output ==="
-          tail -50 /tmp/test-output.txt
-          exit $EXIT_CODE
+          set +e
+          pip install scikit-learn xgboost lightgbm pandas numpy scipy \
+            imbalanced-learn dask polars \
+            fastapi uvicorn pydantic pyyaml \
+            python-multipart python-jose passlib httpx websockets \
+            sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle \
+            pytest pytest-cov 2>&1 | tee /tmp/rest-install.log
+          echo "EXIT CODE: $?"
+          echo "=== Last 30 lines ==="
+          tail -30 /tmp/rest-install.log
+
+      - name: Verify
+        run: |
+          PYTHONPATH=src python -c "import mlkit; print('mlkit:', mlkit.__version__)" 2>&1
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        run: pytest tests/ -v --tb=short 2>&1 | tee /tmp/test.log
