@@ -3,8 +3,6 @@ name: Build Docker
 on:
   push:
     branches: [master, main]
-    tags:
-      - 'v*'
   pull_request:
     branches: [master, main]
 
@@ -16,18 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: mlkit:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: docker build -t mlkit:test .
 
-      - name: Test Docker container
-        run: |
-          docker run --rm mlkit:test python -c "import mlkit; print(mlkit.__version__)"
+      - name: Verify image
+        run: docker run --rm mlkit:test python -c "import mlkit; print('mlkit', mlkit.__version__)"
