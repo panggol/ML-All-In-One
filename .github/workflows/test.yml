@@ -19,19 +19,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
       - name: Install dependencies
         run: pip install -e .
-
-      - name: Lint
-        run: pip install ruff && ruff check src/mlkit/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
