@@ -25,22 +25,8 @@ jobs:
           pip install --only-binary=:all: torch torchvision
           pip install --only-binary=:all: scikit-learn xgboost lightgbm pandas numpy scipy imbalanced-learn dask polars fastapi uvicorn pydantic pyyaml python-multipart python-jose passlib httpx websockets sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle pytest pytest-cov
 
+      - name: Install mlkit
+        run: pip install -e . --only-binary=:all:
+
       - name: Run tests
-        env:
-          PYTHONPATH: src
-        run: |
-          echo "=== PWD ==="
-          pwd
-          echo "=== ROOT LS ==="
-          ls -la
-          echo "=== SRC LS ==="
-          ls -la src/ || echo "src/ NOT FOUND"
-          echo "=== TESTS LS ==="
-          ls -la tests/ || echo "tests/ NOT FOUND"
-          echo "=== PYTHON PATH ==="
-          python -c "import sys; print(sys.path)"
-          echo "=== MLPATH ==="
-          echo "PYTHONPATH=$PYTHONPATH"
-          echo "=== COLLECT ==="
-          pytest tests/ --collect-only 2>&1
-          echo "=== EXIT $? ==="
+        run: pytest tests/ -v --tb=short
