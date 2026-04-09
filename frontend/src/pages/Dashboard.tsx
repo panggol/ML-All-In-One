@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
 import { Activity, TrendingUp, Clock, Award, Upload, Brain, LineChart } from 'lucide-react'
 import Card from '../components/Card'
 import StatCard from '../components/StatCard'
+import { trainApi, experimentApi } from '../api'
 
 interface ModelRecord {
   name: string
@@ -8,19 +10,6 @@ interface ModelRecord {
   dataset: string
   time: string
 }
-
-const stats = [
-  { label: '总训练次数', value: '128', icon: Activity, color: 'primary' as const },
-  { label: '活跃实验', value: '12', icon: TrendingUp, color: 'emerald' as const },
-  { label: '运行时长', value: '48h', icon: Clock, color: 'amber' as const },
-  { label: '最优模型', value: '94.2%', icon: Award, color: 'violet' as const },
-]
-
-const recentModels: ModelRecord[] = [
-  { name: 'RF-分类器-v3', accuracy: 94.2, dataset: 'iris', time: '2小时前' },
-  { name: 'XGB-回归-v1', accuracy: 87.5, dataset: 'boston', time: '5小时前' },
-  { name: 'LGBM-欺诈检测', accuracy: 91.8, dataset: 'credit', time: '昨天' },
-]
 
 const quickActions = [
   { 
@@ -44,6 +33,58 @@ const quickActions = [
 ]
 
 export default function Dashboard() {
+  const [loading, setLoading] = useState(true)
+  const [recentModels, setRecentModels] = useState<ModelRecord[]>([])
+  const [stats, setStats] = useState({
+    totalJobs: 0,
+    activeExperiments: 0,
+    runtime: '0h',
+    bestAccuracy: '0%'
+  })
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+  const loadDashboardData = async () => {
+    setLoading(true)
+    try {
+      // 获取训练任务列表
+      const jobs = await trainApi.list()
+      const completedJobs = jobs.filter(j => j.status === 'completed')
+      
+      // 获取实验列表
+      const experiments = await experimentApi.list()
+      const activeExps = experiments.filter(e => e.status === 'running' || e.status === 'pending')
+      
+      // 计算统计数据
+      const bestJob = completedJobs.reduce((best, job) => {
+        const acc = job.metrics?.accuracy || 0
+        const bestAcc = best?.metrics?.accuracy || 0
+        return acc > bestAcc ? job : best
+      }, null as any)
+
+      setStats({
+        totalJobs: completedJobs.length,
+        activeExperiments: activeExps.length,
+        runtime: calculateRuntime(jobs),
+        bestAccuracy: bestJob ? `${(bestJob.metrics.accuracy * 100).toFixed(1)}%` : '0%'
+      })
+
+      // 设置最近模型
+      setRecentModels(completedJobs.slice(0, 5).map(job => ({
+        name: job.model_name,
+        accuracy: job.metrics?.accuracy ? job.metrics.accuracy * 100 : 0,
+        dataset: `Dataset #${job.data_file_id || '?'}`,
+        time: formatTime(job.created_at)
+      })))
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
@@ -54,9 +95,10 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
+        <StatCard label="总训练次数" value={stats.totalJobs.toString()} icon={Activity} color="primary" />
+        <StatCard label="活跃实验" value={stats.activeExperiments.toString()} icon={TrendingUp} color="emerald" />
+        <StatCard label="运行时长" value={stats.runtime} icon={Clock} color="amber" />
+        <StatCard label="最优模型" value={stats.bestAccuracy} icon={Award} color="violet" />
       </div>
 
       {/* Quick Actions & Recent */}
@@ -85,23 +127,29 @@ export default function Dashboard() {
         {/* Recent Models */}
         <Card>
           <h2 className="text-lg font-semibold text-slate-900 mb-4">最近模型</h2>
-          <div className="space-y-4">
-            {recentModels.map((model, index) => (
-              <div 
-                key={model.name} 
-                className={`flex items-center justify-between py-2 ${index !== recentModels.length - 1 ? 'border-b border-slate-100' : ''}`}
-              >
-                <div>
-                  <p className="font-medium text-slate-900">{model.name}</p>
-                  <p className="text-sm text-slate-500">{model.dataset} · {model.time}</p>
+          {loading ? (
+            <div className="text-center py-8 text-slate-500">加载中...</div>
+          ) : recentModels.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">暂无训练记录</div>
+          ) : (
+            <div className="space-y-4">
+              {recentModels.map((model, index) => (
+                <div 
+                  key={index}
+                  className={`flex items-center justify-between py-2 ${index !== recentModels.length - 1 ? 'border-b border-slate-100' : ''}`}
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">{model.name}</p>
+                    <p className="text-sm text-slate-500">{model.dataset} · {model.time}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-primary-600">{model.accuracy.toFixed(1)}%</p>
+                    <p className="text-xs text-slate-400">准确率</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold text-primary-600">{model.accuracy}%</p>
-                  <p className="text-xs text-slate-400">准确率</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 
@@ -128,4 +176,33 @@ export default function Dashboard() {
       </Card>
     </div>
   )
+}
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  
+  if (hours < 1) return '刚刚'
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return date.toLocaleDateString('zh-CN')
+}
+
+function calculateRuntime(jobs: any[]): string {
+  const completedJobs = jobs.filter(j => j.status === 'completed' && j.finished_at && j.created_at)
+  if (completedJobs.length === 0) return '0h'
+  
+  let totalMs = 0
+  completedJobs.forEach(job => {
+    const start = new Date(job.created_at).getTime()
+    const end = new Date(job.finished_at).getTime()
+    totalMs += end - start
+  })
+  
+  const hours = Math.floor(totalMs / (1000 * 60 * 60))
+  if (hours < 24) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
 }
