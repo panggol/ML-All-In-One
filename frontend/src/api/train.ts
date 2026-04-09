@@ -11,6 +11,7 @@ export interface TrainRequest {
 
 export interface TrainJob {
   id: number
+  data_file_id?: number
   model_name: string
   task_type: string
   status: 'pending' | 'running' | 'completed' | 'failed' | 'stopped'
@@ -19,6 +20,7 @@ export interface TrainJob {
   metrics: Record<string, number>
   logs: string
   created_at: string
+  finished_at?: string
 }
 
 export interface TrainStatus {
