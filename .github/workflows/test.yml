@@ -19,18 +19,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install core dependencies
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
-          # Install torch CPU-only (much smaller than default)
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          # Install remaining deps
-          pip install scikit-learn xgboost lightgbm pandas numpy scipy \
-            imbalanced-learn dask polars \
-            fastapi uvicorn pydantic pyyaml \
-            python-multipart python-jose passlib httpx websockets \
-            sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle \
-            pytest pytest-cov
+          pip install --only-binary=:all: torch torchvision
+          pip install --only-binary=:all: scikit-learn xgboost lightgbm pandas numpy scipy imbalanced-learn dask polars fastapi uvicorn pydantic pyyaml python-multipart python-jose passlib httpx websockets sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle pytest pytest-cov
 
       - name: Run tests
         env:
