@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import { Sparkles, Database, LineChart, Settings } from 'lucide-react'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Sparkles, Database, LineChart, LogOut, User } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Training from './pages/Training'
 import Experiments from './pages/Experiments'
+import AuthPage from './pages/AuthPage'
 
 type Tab = 'dashboard' | 'training' | 'experiments'
 
@@ -12,8 +14,33 @@ const tabs = [
   { id: 'experiments' as const, label: '实验记录', icon: LineChart },
 ]
 
-function App() {
+// 私有路由包装
+function PrivateRoute() {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+  return <Outlet />
+}
+
+// 主布局
+function Layout() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [user, setUser] = useState<{ username: string; email: string } | null>(null)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    window.location.href = '/login'
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -43,6 +70,35 @@ function App() {
               </button>
             ))}
           </nav>
+
+          {/* User Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                <User className="w-4 h-4 text-primary-600" />
+              </div>
+              <span className="text-sm font-medium text-slate-700">{user?.username || '用户'}</span>
+            </button>
+            
+            {showUserMenu && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1">
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="font-medium text-slate-900">{user?.username}</p>
+                  <p className="text-xs text-slate-500">{user?.email}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  退出登录
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -53,6 +109,22 @@ function App() {
         {activeTab === 'experiments' && <Experiments />}
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} />
+        <Route element={<PrivateRoute />}>
+          <Route path="/dashboard" element={<Layout />} />
+          <Route path="/training" element={<Layout />} />
+          <Route path="/experiments" element={<Layout />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
 

@@ -1,127 +1,47 @@
-# ML All In One - FastAPI Backend
-
-from fastapi import FastAPI, HTTPException, UploadFile, File
+"""
+ML All In One - FastAPI 应用入口
+"""
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List, Any
-import sys
-import os
+from contextlib import asynccontextmanager
 
-# Add src to path for mlkit
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+from api.database import engine, Base
+from api.routes import auth, data, train, experiments, models
 
-app = FastAPI(title="ML All In One API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时创建数据库表
+    Base.metadata.create_all(bind=engine)
+    yield
+    # 关闭时清理
 
-# CORS for frontend
+app = FastAPI(
+    title="ML All In One API",
+    version="2.0.0",
+    description="机器学习训练平台 API",
+    lifespan=lifespan
+)
+
+# CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ============ Health Check ============
+# 注册路由
+app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
+app.include_router(data.router, prefix="/api/data", tags=["数据"])
+app.include_router(train.router, prefix="/api/train", tags=["训练"])
+app.include_router(experiments.router, prefix="/api/experiments", tags=["实验"])
+app.include_router(models.router, prefix="/api/models", tags=["模型"])
+
+@app.get("/")
+async def root():
+    return {"message": "ML All In One API", "version": "2.0.0"}
+
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
-
-# ============ Data Endpoints ============
-@app.post("/api/data/upload")
-async def upload_data(file: UploadFile = File(...)):
-    """Upload CSV data file"""
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(400, "Only CSV files supported")
-    
-    # TODO: Implement with mlkit DataLoader
-    return {
-        "filename": file.filename,
-        "status": "uploaded",
-        "rows": 0,
-        "columns": []
-    }
-
-@app.get("/api/data/info")
-async def get_data_info():
-    """Get uploaded data info"""
-    # TODO: Return from session/context
-    return {
-        "rows": 150,
-        "columns": ["sepal_length", "sepal_width", "petal_length", "petal_width", "species"],
-        "dtypes": {"sepal_length": "float64", "species": "category"}
-    }
-
-# ============ Training Endpoints ============
-class TrainRequest(BaseModel):
-    model_type: str
-    task_type: str
-    target_column: str
-    hyperparameters: Optional[dict] = {}
-
-@app.post("/api/train")
-async def train(request: TrainRequest):
-    """Start training job"""
-    # TODO: Integrate with mlkit Runner
-    return {
-        "job_id": "job_001",
-        "status": "started",
-        "message": "Training started"
-    }
-
-@app.get("/api/train/{job_id}/status")
-async def get_train_status(job_id: str):
-    """Get training status"""
-    # TODO: Return real-time status
-    return {
-        "job_id": job_id,
-        "status": "running",
-        "progress": 67,
-        "current_iter": 67,
-        "accuracy": 0.892,
-        "loss": 0.234
-    }
-
-@app.post("/api/train/{job_id}/stop")
-async def stop_train(job_id: str):
-    """Stop training"""
-    return {"job_id": job_id, "status": "stopped"}
-
-# ============ Model Endpoints ============
-@app.get("/api/models")
-async def list_models():
-    """List trained models"""
-    return {
-        "models": [
-            {"id": "model_001", "name": "RF-iris-v1", "accuracy": 94.2, "created": "2026-04-09"},
-            {"id": "model_002", "name": "XGB-iris-v1", "accuracy": 95.1, "created": "2026-04-09"},
-        ]
-    }
-
-@app.post("/api/predict")
-async def predict(data: List[dict], model_id: Optional[str] = None):
-    """Run prediction"""
-    # TODO: Use loaded model
-    return {
-        "predictions": [0, 1, 2] * len(data),
-        "probabilities": [[0.1, 0.8, 0.1]] * len(data)
-    }
-
-# ============ Experiment Endpoints ============
-@app.get("/api/experiments")
-async def list_experiments():
-    """List all experiments"""
-    return {
-        "experiments": [
-            {
-                "id": "exp_001",
-                "name": "RF-iris-baseline",
-                "status": "completed",
-                "metrics": {"accuracy": 94.2, "f1": 93.8},
-                "created": "2026-04-09 18:00"
-            }
-        ]
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    return {"status": "ok"}
