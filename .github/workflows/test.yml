@@ -19,14 +19,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install --only-binary=:all: torch torchvision
-          pip install --only-binary=:all: scikit-learn xgboost lightgbm pandas numpy scipy imbalanced-learn dask polars fastapi uvicorn pydantic pyyaml python-multipart python-jose passlib httpx websockets sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle pytest pytest-cov
+      - name: Install
+        run: pip install --upgrade pip pytest scikit-learn pandas numpy scipy torch --only-binary=:all:
 
       - name: Install mlkit
         run: pip install -e . --only-binary=:all:
 
-      - name: Run tests
+      - name: Test
         run: pytest tests/ -v --tb=short
