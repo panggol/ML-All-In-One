@@ -71,6 +71,7 @@ class DataLoader:
         self,
         file_path: str | None = None,
         chunksize: int | None = None,
+        exclude_columns: list[str] | None = None,
         **read_kwargs,
     ):
         """
@@ -79,10 +80,12 @@ class DataLoader:
         Args:
             file_path: 数据文件路径
             chunksize: 分块大小 (用于大数据)
+            exclude_columns: 加载时自动排除的列名列表（默认排除 'id' 列）
             **read_kwargs: pandas read_csv/read_parquet 等参数
         """
         self.file_path = file_path
         self.chunksize = chunksize
+        self.exclude_columns = exclude_columns if exclude_columns is not None else ["id"]
         self.read_kwargs = read_kwargs
 
         # 自动推断文件格式
@@ -122,15 +125,20 @@ class DataLoader:
 
         read_kwargs = {**self.read_kwargs, **kwargs}
 
+        # 从 kwargs 中提取 exclude_columns，实例级别优先
+        exclude_columns = kwargs.pop("exclude_columns", self.exclude_columns)
+        # 从 read_kwargs 中也移除 exclude_columns，避免重复传递给 _load_* 方法
+        read_kwargs.pop("exclude_columns", None)
+
         # 根据格式选择加载方式
         if self.file_format == "csv":
-            return self._load_csv(**read_kwargs)
+            return self._load_csv(exclude_columns=exclude_columns, **read_kwargs)
         elif self.file_format == "parquet":
-            return self._load_parquet(**read_kwargs)
+            return self._load_parquet(exclude_columns=exclude_columns, **read_kwargs)
         elif self.file_format == "json":
-            return self._load_json(**read_kwargs)
+            return self._load_json(exclude_columns=exclude_columns, **read_kwargs)
         elif self.file_format == "pickle":
-            return self._load_pickle(**read_kwargs)
+            return self._load_pickle(exclude_columns=exclude_columns, **read_kwargs)
         else:
             raise ValueError(f"Unsupported format: {self.file_format}")
 
@@ -151,7 +159,7 @@ class DataLoader:
             for i in range(0, len(df), self.chunksize):
                 yield df.iloc[i : i + self.chunksize]
 
-    def _load_csv(self, **kwargs) -> Dataset:
+    def _load_csv(self, exclude_columns: list[str] | None = None, **kwargs) -> Dataset:
         """加载 CSV"""
         target_column = kwargs.pop("target_column", None)
         if self.chunksize:
@@ -169,26 +177,27 @@ class DataLoader:
         else:
             df = pd.read_csv(self.file_path, **kwargs)
 
-        return self._dataframe_to_dataset(df, target_column)
+        return self._dataframe_to_dataset(df, target_column, exclude_columns)
 
-    def _load_parquet(self, **kwargs) -> Dataset:
+    def _load_parquet(self, exclude_columns: list[str] | None = None, **kwargs) -> Dataset:
         """加载 Parquet"""
         target_column = kwargs.pop("target_column", None)
         df = pd.read_parquet(self.file_path, **kwargs)
-        return self._dataframe_to_dataset(df, target_column)
+        return self._dataframe_to_dataset(df, target_column, exclude_columns)
 
-    def _load_json(self, **kwargs) -> Dataset:
+    def _load_json(self, exclude_columns: list[str] | None = None, **kwargs) -> Dataset:
         """加载 JSON"""
         target_column = kwargs.pop("target_column", None)
         df = pd.read_json(self.file_path, **kwargs)
-        return self._dataframe_to_dataset(df, target_column)
+        return self._dataframe_to_dataset(df, target_column, exclude_columns)
 
-    def _load_pickle(self, **kwargs) -> Dataset:
+    def _load_pickle(self, exclude_columns: list[str] | None = None, **kwargs) -> Dataset:
         """加载 Pickle"""
+        target_column = kwargs.pop("target_column", None)
         obj = pd.read_pickle(self.file_path, **kwargs)
 
         if isinstance(obj, pd.DataFrame):
-            return self._dataframe_to_dataset(obj, kwargs.get("target_column"))
+            return self._dataframe_to_dataset(obj, target_column, exclude_columns)
         elif isinstance(obj, tuple) and len(obj) == 2:
             X, y = obj
             return Dataset(X, y)
@@ -196,27 +205,36 @@ class DataLoader:
             raise ValueError("Unsupported pickle format")
 
     def _dataframe_to_dataset(
-        self, df: pd.DataFrame, target_column: str | None = None
+        self,
+        df: pd.DataFrame,
+        target_column: str | None = None,
+        exclude_columns: list[str] | None = None,
     ) -> Dataset:
-        """将 DataFrame 转换为 Dataset"""
+        """将 DataFrame 转换为 Dataset，自动排除指定列"""
         # 分离特征和标签
         if target_column and target_column in df.columns:
             y = df[target_column].values
-            X = df.drop(columns=[target_column]).values
-            feature_names = [c for c in df.columns if c != target_column]
+            feature_cols = [c for c in df.columns if c != target_column]
             target_names = [target_column]
         else:
             # 假设最后一列是标签
             if len(df.columns) > 1:
                 y = df.iloc[:, -1].values
-                X = df.iloc[:, :-1].values
-                feature_names = list(df.columns[:-1])
+                feature_cols = list(df.columns[:-1])
                 target_names = [df.columns[-1]]
             else:
                 X = df.values
                 y = None
                 feature_names = list(df.columns)
                 target_names = None
+                return Dataset(X=X, y=y, feature_names=feature_names, target_names=target_names)
+
+        # 自动排除指定列（如 'id'）
+        if exclude_columns:
+            feature_cols = [c for c in feature_cols if c not in exclude_columns]
+
+        X = df[feature_cols].values
+        feature_names = feature_cols
 
         # 处理特征名
         if feature_names is not None and any(isinstance(f, int) for f in feature_names):
