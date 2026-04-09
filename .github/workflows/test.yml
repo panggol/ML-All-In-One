@@ -26,4 +26,9 @@ jobs:
         run: pip install -e .
 
       - name: Test
-        run: pytest tests/ -v --tb=short
+        run: |
+          echo "=== Test Start ==="
+          pytest tests/ -v --tb=short 2>&1 | tee /tmp/pytest-output.txt
+          echo "=== Exit: $? ==="
+          echo "=== Last 50 lines ==="
+          tail -50 /tmp/pytest-output.txt
