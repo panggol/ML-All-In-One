@@ -98,8 +98,8 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
             detail="用户已被禁用"
         )
     
-    # 创建 token
-    access_token = create_access_token(data={"sub": user.id})
+    # 创建 token (sub必须是string)
+    access_token = create_access_token(data={"sub": str(user.id)})
     
     return Token(access_token=access_token)
 
