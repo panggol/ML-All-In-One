@@ -2,7 +2,7 @@ import { clsx } from 'clsx'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'stop'
+  variant?: 'primary' | 'secondary' | 'stop' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
   children: ReactNode
 }
@@ -20,6 +20,7 @@ export default function Button({
     primary: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
     secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-300',
     stop: 'bg-red-500 text-white hover:bg-red-600 active:bg-red-700',
+    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 active:bg-slate-200',
   }
   
   const sizeStyles = {
