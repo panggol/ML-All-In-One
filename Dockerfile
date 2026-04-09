@@ -18,7 +18,7 @@ WORKDIR /app
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
-# Install torch first (largest dependency, separate layer for caching)
+# Install torch CPU-only (much faster than GPU version)
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining dependencies
@@ -39,6 +39,10 @@ COPY README.md ./
 # Create directories
 RUN mkdir -p /app/data /app/logs /app/checkpoints /app/experiments
 
+# Set PYTHONPATH so mlkit can be imported
 ENV PYTHONPATH=/app/src:$PYTHONPATH
+
+# Verify mlkit can be imported
+RUN python -c "import mlkit; print(f'mlkit {mlkit.__version__} installed successfully')"
 
 CMD ["python", "-c", "import mlkit; print(f'mlkit {mlkit.__version__} ready!')"]

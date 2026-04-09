@@ -14,11 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: false
@@ -26,6 +23,3 @@ jobs:
           tags: mlkit:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Verify image
-        run: docker run --rm mlkit:test python -c "import mlkit; print('mlkit', mlkit.__version__)"
