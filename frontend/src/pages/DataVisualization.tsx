@@ -15,7 +15,7 @@ import {
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
 
-const generateHistogramData = (feature: string): HistogramDatum[] => {
+const generateHistogramData = (_feature: string): HistogramDatum[] => {
   const ranges = ['0-10', '10-20', '20-30', '30-40', '40-50', '50-60', '60-70', '70-80', '80-90', '90-100']
   const counts = Array.from({ length: 10 }, () => Math.floor(Math.random() * 200 + 20))
   return ranges.map((range, i) => ({ range, count: counts[i], density: counts[i] / 1000 }))

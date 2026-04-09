@@ -27,11 +27,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
+COPY api/ ./api/
 COPY examples/ ./examples/
 COPY README.md ./
 
 # Create directories
-RUN mkdir -p /app/data /app/logs /app/checkpoints /app/experiments
+RUN mkdir -p /app/data /app/logs /app/checkpoints /app/experiments /app/uploads
 
 # Set PYTHONPATH so mlkit can be imported
 ENV PYTHONPATH=/app/src:$PYTHONPATH

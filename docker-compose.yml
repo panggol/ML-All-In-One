@@ -2,32 +2,17 @@
 # ML All In One - Docker Compose
 # =============================================================================
 # Usage:
-#   docker compose up -d          # Start API server
-#   docker compose run --rm mlkit python examples/train_sklearn.py
-#   docker compose run --rm mlkit python examples/example_auth.py
+#   docker compose up -d          # 启动所有服务
+#   docker compose logs -f        # 查看日志
 # =============================================================================
 
 services:
-  mlkit:
-    build: .
-    image: mlkit:latest
-    container_name: mlkit
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./checkpoints:/app/checkpoints
-      - ./experiments:/app/experiments
-    working_dir: /app
-    environment:
-      - PYTHONPATH=/app/src
-    networks:
-      - mlkit-net
-
   api:
-    build: .
-    image: mlkit:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: mlkit-api
-    command: uvicorn mlkit.api.inference:app --host 0.0.0.0 --port 8000
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     volumes:
@@ -35,13 +20,15 @@ services:
       - ./logs:/app/logs
       - ./checkpoints:/app/checkpoints
       - ./experiments:/app/experiments
+      - ./uploads:/app/uploads
     working_dir: /app
     environment:
-      - PYTHONPATH=/app/src
+      - PYTHONPATH=/app/src:/app
+      - DATABASE_URL=sqlite:///./ml_all_in_one.db
     networks:
       - mlkit-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

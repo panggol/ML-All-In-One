@@ -1,4 +1,4 @@
-import { Sparkles, Activity, TrendingUp, Clock, Award, Upload, Brain, LineChart } from 'lucide-react'
+import { Activity, TrendingUp, Clock, Award, Upload, Brain, LineChart } from 'lucide-react'
 import Card from '../components/Card'
 import StatCard from '../components/StatCard'
 

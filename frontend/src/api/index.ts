@@ -1,4 +1,9 @@
-export { default as api, authApi, dataApi, trainApi, experimentApi } from './client'
+export { default as api } from './client'
+export { authApi } from './auth'
+export { dataApi } from './data'
+export { trainApi } from './train'
+export { experimentApi } from './experiments'
+
 export type { LoginRequest, RegisterRequest, AuthResponse, User } from './auth'
 export type { DataFile } from './data'
 export type { TrainRequest, TrainJob, TrainStatus } from './train'
