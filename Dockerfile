@@ -23,13 +23,7 @@ RUN pip install --no-cache-dir torch torchvision --index-url https://download.py
 
 # Install remaining dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir \
-    scikit-learn xgboost lightgbm pandas numpy scipy \
-    imbalanced-learn dask polars \
-    fastapi uvicorn pydantic pyyaml \
-    python-multipart python-jose passlib httpx websockets \
-    sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle \
-    pytest pytest-cov
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ ./src/
