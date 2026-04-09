@@ -8,7 +8,7 @@
 
 FROM python:3.12-slim
 
-# Install build dependencies
+# Install build dependencies and verify internet access
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
@@ -17,11 +17,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Upgrade pip first for better wheel support
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
 # Copy dependency files first (for caching)
 COPY pyproject.toml ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -e .
+# Use --only-binary=:all: to prefer pre-built wheels (faster, more reliable)
+RUN pip install --no-cache-dir --only-binary=:all: -e .
 
 # Copy source code
 COPY src/ ./src/
