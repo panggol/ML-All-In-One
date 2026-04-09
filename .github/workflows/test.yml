@@ -28,19 +28,10 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: |
-          pip install -e .
-          pip install pytest pytest-cov ruff black
+        run: pip install -e .
 
       - name: Lint
-        run: ruff check src/mlkit/
+        run: pip install ruff && ruff check src/mlkit/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
-
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: htmlcov/
