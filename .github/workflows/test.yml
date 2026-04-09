@@ -19,11 +19,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install
-        run: pip install --upgrade pip pytest scikit-learn pandas numpy scipy torch --only-binary=:all:
+      - name: Install deps
+        run: pip install --upgrade pip pytest scikit-learn pandas numpy scipy torch
 
       - name: Install mlkit
-        run: pip install -e . --only-binary=:all:
+        run: pip install -e .
 
       - name: Test
         run: pytest tests/ -v --tb=short
