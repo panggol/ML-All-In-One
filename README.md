@@ -1,171 +1,72 @@
-# 🤖 ML All In One
+# ML All In One
 
-基于 **Harness Engineering** 理念构建的机器学习全流程训练平台。支持 sklearn、XGBoost、LightGBM、PyTorch 多种模型，提供 Hook 生命周期扩展、实验追踪、Gradio Web UI 和 Docker 部署。
+机器学习全流程训练平台，支持 sklearn、XGBoost、LightGBM、PyTorch。
 
----
-
-## ✨ 核心特性
-
-| 分类 | 功能 |
-|------|------|
-| **多模型支持** | sklearn / XGBoost / LightGBM / PyTorch |
-| **预处理** | Encoder / Scaler / Imputer / PCA / LDA / 文本向量化 |
-| **训练编排** | Hook 生命周期（8 事件 + Priority + One-shot） |
-| **实验追踪** | Experiment 系统（指标记录、横向对比、Markdown 报告） |
-| **用户认证** | JWT + Bcrypt 用户注册/登录 |
-| **Web UI** | Gradio 可视化界面（训练/实验/推理/数据 4 Tab） |
-| **部署** | Docker / docker-compose 一键部署 |
-| **测试** | 105 个单元测试，100% 通过率 |
-
----
-
-## 🚀 快速开始
-
-### 安装
+## 安装
 
 ```bash
 git clone https://github.com/panggol/ML-All-In-One.git
 cd ML-All-In-One
-pip install -e .      # 安装为可编辑包
+pip install -e .
 ```
 
-### 运行 Web UI
+## Web UI
 
 ```bash
 python app.py
-# 访问 http://localhost:7860
 ```
 
-### 运行训练示例
+打开 http://localhost:7860 ，有四个页面：训练、实验、推理、数据。
 
-```bash
-python run_example.py
-```
+## 训练
 
-### 运行单个示例
+上传 CSV，选择模型和参数，点击开始训练。训练过程会自动记录指标，生成可视化曲线。
 
-```bash
-PYTHONPATH=src python examples/train_sklearn.py
-PYTHONPATH=src python examples/example_auth.py
-PYTHONPATH=src python examples/example_continuous_learning.py
-```
+支持 RandomForest、GradientBoosting、LogisticRegression 等 sklearn 模型，也支持 XGBoost、LightGBM、PyTorch。
 
----
+## 实验追踪
 
-## 📁 项目结构
-
-```
-ml-all-in-one/
-├── src/mlkit/              # 核心框架
-│   ├── config/             # 配置系统（dot-path / YAML / ENV）
-│   ├── auth/               # 用户认证（JWT / Bcrypt）
-│   ├── data/               # 数据加载（CSV / Parquet / JSON）
-│   ├── hooks/              # 生命周期钩子（8 事件）
-│   │   ├── LoggerHook      # 日志记录
-│   │   ├── CheckpointHook  # 模型保存
-│   │   ├── EarlyStoppingHook  # 早停
-│   │   └── ExperimentTrackHook # 实验追踪
-│   ├── experiment/         # 实验追踪系统
-│   ├── preprocessing/      # 预处理模块
-│   │   ├── tabular/        # 表格（encoder/scaler/imputer）
-│   │   ├── text/           # 文本（tokenizer/vectorizer）
-│   │   └── dimensionality/ # 降维（PCA / LDA）
-│   ├── model/              # 模型基类
-│   └── api/                # FastAPI 推理服务
-├── examples/                # 示例代码
-├── tests/                  # 单元测试（105 个）
-├── app.py                  # Gradio Web UI
-├── Dockerfile              # Docker 镜像
-├── docker-compose.yml       # Docker Compose
-└── run_example.py          # 一键运行示例
-```
-
----
-
-## 🔧 核心模块
-
-### Hook System
-
-```python
-from mlkit.hooks import LoggerHook, CheckpointHook, EarlyStoppingHook
-
-runner = create_runner(config)
-runner.register_hook(LoggerHook(), priority=10)
-runner.register_hook(CheckpointHook(save_best=True, monitor="val_acc"))
-runner.register_hook(EarlyStoppingHook(patience=10, monitor="val_loss"))
-runner.train()
-```
-
-### Experiment 追踪
+每次训练会生成实验记录，自动保存参数和指标。可以对比不同实验的结果，生成对比报告。
 
 ```python
 from mlkit.experiment import ExperimentManager
-
 manager = ExperimentManager("./experiments")
-exp = manager.create_experiment("lr-sweep-v1", params={"lr": 0.01})
-runner = create_runner(config, experiment=exp)
-runner.train()
-report = manager.generate_report([exp.id])
+exp = manager.create_experiment("exp-001", params={"lr": 0.01})
 ```
 
-### Config 系统
+## Hook 机制
+
+在训练循环中插入扩展点，记录日志、保存模型、早停等。
 
 ```python
-from mlkit.config import Config
-
-config = Config.from_yaml("config.yaml")
-lr = config.get("model.learning_rate")  # dot-path 访问
-
-# 环境变量注入
-# MLKIT_TRAIN__EPOCHS=100 python train.py
+from mlkit.hooks import LoggerHook, CheckpointHook
+runner.register_hook(LoggerHook())
+runner.register_hook(CheckpointHook(save_best=True))
 ```
 
----
-
-## 🐳 Docker 部署
+## Docker 部署
 
 ```bash
-# 构建镜像
 docker build -t mlkit .
-
-# 运行训练
 docker compose run --rm mlkit python run_example.py
-
-# 启动 API 服务
-docker compose up api
 ```
 
----
-
-## 📊 测试
+## 测试
 
 ```bash
 pytest tests/ -v
-# 结果：105 passed, 0 failed
 ```
 
----
+## 项目结构
 
-## 🛠️ 开发
-
-```bash
-# 安装开发依赖
-pip install -r requirements.txt
-
-# 代码检查
-ruff check src/mlkit/
-
-# 格式化
-ruff format src/mlkit/
-black src/mlkit/
 ```
-
----
-
-## 📄 License
-
-MIT License
-
----
-
-*基于 Harness Engineering 理念构建 | Powered by OpenClaw*
+src/mlkit/
+├── config/          # 配置管理
+├── auth/            # 用户认证
+├── data/            # 数据加载
+├── hooks/           # 训练生命周期钩子
+├── experiment/       # 实验记录
+├── preprocessing/    # 数据预处理
+├── model/           # 模型封装
+└── api/             # 推理服务
+```
