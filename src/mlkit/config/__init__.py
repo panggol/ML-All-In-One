@@ -1,157 +1,289 @@
 """
-配置系统 - Configuration System
+Config 系统 - 配置管理
 
-支持 YAML/JSON/Python 配置格式，提供配置继承、验证等功能
+Harness Engineering 核心理念：
+- 六层配置优先级：CLI → ENV → File → Class → Defaults
+- 配置分层管理，dot-path 访问
 """
 
-import json
+from __future__ import annotations
+
+import copy
 import os
-from copy import deepcopy
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore
 
 
+class ConfigError(Exception):
+    """配置相关错误"""
+    pass
+
+
+class ConfigValidationError(ConfigError):
+    """配置验证失败"""
+    pass
+
+
+class ConfigKeyNotFoundError(ConfigError, KeyError):
+    """配置键不存在"""
+    pass
+
+
+@dataclass
 class Config:
-    """配置管理类"""
+    """通用配置类（向后兼容）
 
-    def __init__(self, config_dict: dict | None = None):
-        self._config = config_dict or {}
-        self._base_config: Config | None = None
+    支持：
+    - dot-path 访问（config.get("train.epochs")）
+    - YAML/JSON 加载
+    - 多配置合并
+    - 环境变量注入
+    - 字段验证
 
-    @classmethod
-    def from_yaml(cls, file_path: str | Path) -> "Config":
-        """从 YAML 文件加载配置"""
-        with open(file_path, encoding="utf-8") as f:
-            config_dict = yaml.safe_load(f)
-        return cls(config_dict)
+    用法:
+        config = Config.from_yaml("config.yaml")
+        epochs = config.get("train.epochs", 100)
+        hidden_size = config.get("model.hidden_size", 256)
+    """
 
-    @classmethod
-    def from_json(cls, file_path: str | Path) -> "Config":
-        """从 JSON 文件加载配置"""
-        with open(file_path, encoding="utf-8") as f:
-            config_dict = json.load(f)
-        return cls(config_dict)
+    # 通用字段（实际使用时会被具体配置类替换）
+    _data: dict = field(default_factory=dict)
 
-    @classmethod
-    def from_dict(cls, config_dict: dict) -> "Config":
-        """从字典创建配置"""
-        return cls(deepcopy(config_dict))
+    def __post_init__(self):
+        # 如果传入的是字典，存到 _data
+        if self._data is None:
+            self._data = {}
 
-    def merge(self, base_config: "Config") -> "Config":
-        """配置继承合并"""
-        merged = deepcopy(self)
-        merged._base_config = base_config
-        merged._config = self._merge_dict(base_config._config, self._config)
-        return merged
-
-    def _merge_dict(self, base: dict, override: dict) -> dict:
-        """递归合并字典"""
-        result = deepcopy(base)
-        for key, value in override.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, dict)
-            ):
-                result[key] = self._merge_dict(result[key], value)
-            else:
-                result[key] = deepcopy(value)
-        return result
+    # ── dot-path 访问 ───────────────────────────────────
 
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置值，支持点号访问"""
-        keys = key.split(".")
-        value = self._config
+        """dot-path 获取配置值
 
-        # 先查找当前配置
+        Args:
+            key: 支持 "a.b.c" 形式的多层访问
+            default: 键不存在时返回的默认值
+
+        用法:
+            config.get("train.epochs", 100)
+            config.get("model.hidden_size", 256)
+        """
+        if not self._data:
+            return default
+        keys = key.split(".")
+        value: Any = self._data
         for k in keys:
             if isinstance(value, dict):
                 value = value.get(k)
                 if value is None:
-                    # 如果找不到，尝试从 base_config 查找
-                    if self._base_config is not None:
-                        return self._base_config.get(key, default)
                     return default
+            elif hasattr(value, k):
+                value = getattr(value, k)
             else:
-                if self._base_config is not None:
-                    return self._base_config.get(key, default)
                 return default
-
-        return value
+        return value if value is not None else default
 
     def set(self, key: str, value: Any) -> None:
-        """设置配置值"""
+        """dot-path 设置配置值"""
         keys = key.split(".")
-        config = self._config
-
+        d = self._data
         for k in keys[:-1]:
-            if k not in config:
-                config[k] = {}
-            config = config[k]
+            if k not in d:
+                d[k] = {}
+            d = d[k]
+        d[keys[-1]] = value
 
-        config[keys[-1]] = value
-
-    def __getitem__(self, key: str) -> Any:
-        """支持 config['key'] 访问"""
-        value = self.get(key)
-        if value is None:
-            raise KeyError(f"Config key '{key}' not found")
-        return value
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.set(key, value)
-
-    def __contains__(self, key: str) -> bool:
-        """支持 'key' in config"""
-        return self.get(key) is not None
+    # ── 序列化 ──────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        """转换为字典"""
-        return deepcopy(self._config)
+        """导出为字典"""
+        return copy.deepcopy(self._data)
 
-    def to_yaml(self) -> str:
-        """转换为 YAML 字符串"""
-        return yaml.dump(self._config, allow_unicode=True, default_flow_style=False)
+    @classmethod
+    def from_dict(cls, data: dict) -> "Config":
+        """从字典创建配置"""
+        if not isinstance(data, dict):
+            raise ConfigError(f"期望 dict，实际 {type(data)}")
+        instance = cls()
+        instance._data = copy.deepcopy(data)
+        return instance
 
-    def to_json(self) -> str:
-        """转换为 JSON 字符串"""
-        return json.dumps(self._config, ensure_ascii=False, indent=2)
+    def to_yaml(self, path: str | Path) -> None:
+        """导出为 YAML 文件"""
+        if yaml is None:
+            raise ConfigError("pyyaml 未安装：pip install pyyaml")
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.dump(self._data, f, allow_unicode=True, default_flow_style=False)
 
-    def save_yaml(self, file_path: str | Path) -> None:
-        """保存为 YAML 文件"""
-        with open(file_path, "w", encoding="utf-8") as f:
-            yaml.dump(self._config, f, allow_unicode=True, default_flow_style=False)
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "Config":
+        """从 YAML 文件加载配置"""
+        if yaml is None:
+            raise ConfigError("pyyaml 未安装：pip install pyyaml")
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        return cls.from_dict(data or {})
 
-    def save_json(self, file_path: str | Path) -> None:
-        """保存为 JSON 文件"""
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(self._config, f, ensure_ascii=False, indent=2)
+    def to_json(self, path: str | Path) -> None:
+        """导出为 JSON 文件"""
+        import json
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self._data, f, indent=2, ensure_ascii=False)
 
-    def validate(self, schema: dict) -> bool:
-        """配置验证（简化版）"""
-        for key, expected_type in schema.items():
-            value = self.get(key)
-            if value is not None and not isinstance(value, expected_type):
-                raise ValueError(
-                    f"Config key '{key}' expected type {expected_type}, got {type(value)}"
-                )
-        return True
+    @classmethod
+    def from_json(cls, path: str | Path) -> "Config":
+        """从 JSON 文件加载配置"""
+        import json
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    # ── 合并 ──────────────────────────────────────────
+
+    def merge(self, other: "Config | dict") -> "Config":
+        """合并另一个配置（other 优先级更高）"""
+        other_data = other._data if isinstance(other, Config) else other
+        merged = _deep_merge(self._data, other_data)
+        return Config.from_dict(merged)
+
+    @classmethod
+    def from_env(cls, prefix: str = "MLKIT_") -> "Config":
+        """从环境变量加载配置
+
+        环境变量命名规则：MLKIT_TRAIN__EPOCHS（双下划线=嵌套）
+        """
+        env_data: dict = {}
+        for key, value in os.environ.items():
+            if not key.startswith(prefix):
+                continue
+            short_key = key[len(prefix):]
+            parts = short_key.lower().split("__")
+            _set_nested(env_data, parts, _cast_value(value))
+        return cls.from_dict(env_data)
+
+    def apply_env(self, prefix: str = "MLKIT_") -> "Config":
+        """用环境变量覆盖当前配置（优先级最高）"""
+        env_config = Config.from_env(prefix)
+        return self.merge(env_config)
 
     def __repr__(self) -> str:
-        return f"Config({self._config})"
+        return f"Config({self._data})"
 
 
-# 便捷函数
-def load_config(file_path: str | Path) -> Config:
-    """加载配置文件（自动识别格式）"""
-    path = Path(file_path)
-    suffix = path.suffix.lower()
+def load_config(path: str) -> Config:
+    """加载配置文件（向后兼容）
 
-    if suffix in [".yaml", ".yml"]:
-        return Config.from_yaml(file_path)
-    elif suffix == ".json":
-        return Config.from_json(file_path)
-    else:
-        raise ValueError(f"Unsupported config format: {suffix}")
+    支持 .yaml / .yml / .json 格式。
+    """
+    path = str(path)
+    if path.endswith(".json"):
+        return Config.from_json(path)
+    return Config.from_yaml(path)
+
+
+# ── TrainingConfig（推荐使用）───────────────────────────────
+
+
+@dataclass
+class TrainingConfig:
+    """训练配置（结构化版本，推荐使用）"""
+
+    # 训练参数
+    epochs: int = 100
+    batch_size: int = 32
+    learning_rate: float = 0.001
+    optimizer: str = "adam"
+    weight_decay: float = 0.0
+    momentum: float = 0.9
+    scheduler: str | None = None  # step / cosine / exponential / none
+    scheduler_params: dict = field(default_factory=dict)
+
+    # 早停
+    early_stopping: bool = True
+    early_stopping_patience: int = 10
+    early_stopping_monitor: str = "val_loss"
+    early_stopping_mode: str = "min"
+    early_stopping_min_delta: float = 0.0
+
+    # 模型保存
+    checkpoint_enabled: bool = True
+    checkpoint_dir: str = "./checkpoints"
+    checkpoint_save_interval: int = 1
+    checkpoint_save_best: bool = True
+    checkpoint_max_keep: int = 5
+
+    # 数据
+    num_workers: int = 4
+    pin_memory: bool = True
+    shuffle_train: bool = True
+
+    # 随机种子
+    seed: int = 42
+
+    # 验证
+    val_interval: int = 1
+    log_interval: int = 10
+
+    # 设备
+    device: str = "auto"
+
+    # 实验追踪
+    experiment_name: str = "default_exp"
+    experiment_dir: str = "./experiments"
+    track_metrics: list = field(default_factory=lambda: ["loss", "accuracy"])
+
+    # GradClip
+    gradient_clip_value: float | None = None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items()}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TrainingConfig":
+        valid = {k: v for k, v in data.items() if k in cls.__annotations__}
+        return cls(**valid)
+
+
+# ── 工具函数 ───────────────────────────────────────────
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """深度合并两个字典，override 优先级更高"""
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _set_nested(d: dict, keys: list[str], value: Any) -> None:
+    for k in keys[:-1]:
+        if k not in d:
+            d[k] = {}
+        d = d[k]
+    d[keys[-1]] = value
+
+
+def _cast_value(value: str) -> Any:
+    if value.lower() in ("true", "yes", "1"):
+        return True
+    if value.lower() in ("false", "no", "0"):
+        return False
+    if value.lower() == "none":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value

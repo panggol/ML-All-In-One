@@ -132,3 +132,4 @@ reviews/
 
 # Demo data
 demo_data/
+.ruff_cache/

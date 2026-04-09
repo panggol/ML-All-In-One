@@ -1,42 +1,12 @@
 """
-ML All In One - 机器学习全流程训练平台
+mlkit - ML All In One
 
-核心模块：
-- config: 配置系统
-- registry: 注册机制
-- model: 模型基类
-- data: 数据处理
-- hooks: 生命周期钩子
-- runner: 训练运行器
+机器学习和深度学习模型训练全流程平台。
 """
 
-from mlkit.api.inference import (
-    InferenceEngine,
-    ModelRegistry,
-    create_inference_app,
-    run_inference_server,
-    serve_model,
-)
 from mlkit.config import Config, load_config
-from mlkit.data import (
-    DataLoader,
-    Dataset,
-    DataValidator,
-    ImbalanceHandler,
-)
-from mlkit.experiment import (
-    Experiment,
-    ExperimentComparator,
-    ExperimentTracker,
-    HyperparameterSearcher,
-)
 from mlkit.hooks import Hook
-from mlkit.model import (
-    BaseModel,
-    PyTorchModel,
-    SKLearnModel,
-    create_model,
-)
+from mlkit.model import BaseModel, SKLearnModel, create_model
 from mlkit.registry import (
     DATASET_REGISTRY,
     HOOK_REGISTRY,
@@ -50,13 +20,18 @@ from mlkit.registry import (
     register_model,
 )
 from mlkit.runner import Runner, create_runner
-from mlkit.utils import (
-    RealTimeLogger,
-    TrainingLogger,
-    get_logger,
+from mlkit.experiment import Experiment, ExperimentManager, ExperimentTrackHook
+from mlkit.auth import (
+    AuthService,
+    User,
+    TokenData,
+    get_auth_service,
+    login_required,
+    admin_required,
+    get_current_user,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # Config
@@ -76,13 +51,7 @@ __all__ = [
     # Model
     "BaseModel",
     "SKLearnModel",
-    "PyTorchModel",
     "create_model",
-    # Data
-    "Dataset",
-    "DataLoader",
-    "ImbalanceHandler",
-    "DataValidator",
     # Hooks
     "Hook",
     # Runner
@@ -90,17 +59,14 @@ __all__ = [
     "create_runner",
     # Experiment
     "Experiment",
-    "ExperimentTracker",
-    "ExperimentComparator",
-    "HyperparameterSearcher",
-    # Utils
-    "RealTimeLogger",
-    "TrainingLogger",
-    "get_logger",
-    # API
-    "ModelRegistry",
-    "InferenceEngine",
-    "create_inference_app",
-    "run_inference_server",
-    "serve_model",
+    "ExperimentManager",
+    "ExperimentTrackHook",
+    # Auth
+    "AuthService",
+    "User",
+    "TokenData",
+    "get_auth_service",
+    "login_required",
+    "admin_required",
+    "get_current_user",
 ]

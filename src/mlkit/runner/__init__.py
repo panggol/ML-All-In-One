@@ -32,7 +32,7 @@ class Runner:
     - 回调执行
     """
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, experiment: "Experiment | None" = None):
         """
         初始化 Runner
 
@@ -47,6 +47,7 @@ class Runner:
 
         self.hooks: list[Hook] = []
         self.stop_training = False
+        self.experiment: "Experiment | None" = experiment
 
         self.current_epoch = 0
         self.global_iter = 0
@@ -65,6 +66,7 @@ class Runner:
 
         # 3. 注册默认 Hooks
         self._register_default_hooks()
+        self._register_experiment_hook()
 
     def _build_datasets(self):
         """构建数据集"""
@@ -132,6 +134,19 @@ class Runner:
                     verbose=True,
                 )
             )
+
+    def _register_experiment_hook(self) -> None:
+        """注册 Experiment 追踪 Hook（Continuous Learning 核心）
+
+        当 Runner 初始化时传入了 Experiment 实例，自动注册 ExperimentTrackHook。
+        """
+        if self.experiment is None:
+            return
+        from mlkit.experiment.hook import ExperimentTrackHook
+        monitor_metric = self.config.get("hooks.monitor", "val_loss")
+        exp_hook = ExperimentTrackHook(self.experiment, monitor_metric=monitor_metric)
+        self.register_hook(exp_hook)
+
 
     def register_hook(self, hook: Hook):
         """注册 Hook"""
@@ -351,7 +366,7 @@ class Runner:
         return self.model
 
 
-def create_runner(config: Config | dict | str) -> Runner:
+def create_runner(config: Config | dict | str, experiment=None) -> Runner:
     """
     工厂函数：创建 Runner
 
@@ -372,7 +387,7 @@ def create_runner(config: Config | dict | str) -> Runner:
     if not isinstance(config, Config):
         raise ValueError(f"Invalid config type: {type(config)}")
 
-    runner = Runner(config)
+    runner = Runner(config, experiment=experiment)
     runner.build()
 
     return runner
