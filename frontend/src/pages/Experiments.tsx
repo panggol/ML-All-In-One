@@ -3,7 +3,18 @@ import { BarChart3, RotateCcw, CheckCircle2, XCircle, Clock } from 'lucide-react
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Badge from '../components/Badge'
-import { experimentApi, Experiment } from '../api'
+import { experimentApi } from '../api'
+
+interface Experiment {
+  id: number
+  name: string
+  description?: string
+  params: Record<string, any>
+  metrics: Record<string, number>
+  status: string
+  created_at: string
+  finished_at?: string
+}
 
 const StatusIcon = ({ status }: { status: string }) => {
   switch (status) {
@@ -107,14 +118,14 @@ export default function Experiments() {
                       {exp.metrics?.accuracy !== undefined ? (
                         <span className="font-medium text-primary-600">{(exp.metrics.accuracy * 100).toFixed(1)}%</span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-400">-</span>
                       )}
                     </td>
                     <td className="py-4 px-4">
                       {exp.metrics?.f1 !== undefined ? (
                         <span className="font-medium text-slate-700">{(exp.metrics.f1 * 100).toFixed(1)}%</span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-400">-</span>
                       )}
                     </td>
                     <td className="py-4 px-4 text-slate-500 text-sm">
@@ -133,19 +144,15 @@ export default function Experiments() {
         <Card>
           <h2 className="text-lg font-semibold text-slate-900 mb-4">实验详情</h2>
           <div className="bg-slate-50 rounded-lg p-4 font-mono text-sm">
-            <pre className="text-slate-700 whitespace-pre-wrap">
-{`名称: ${selectedExperiment.name}
-描述: ${selectedExperiment.description || '无'}
-状态: ${selectedExperiment.status}
-创建时间: ${selectedExperiment.created_at}
-${selectedExperiment.finished_at ? `完成时间: ${selectedExperiment.finished_at}` : ''}
-
-参数:
-${JSON.stringify(selectedExperiment.params, null, 2)}
-
-指标:
-${JSON.stringify(selectedExperiment.metrics, null, 2)}
-            </pre>
+            <div>名称: {selectedExperiment.name}</div>
+            <div>描述: {selectedExperiment.description || '无'}</div>
+            <div>状态: {selectedExperiment.status}</div>
+            <div>创建时间: {selectedExperiment.created_at}</div>
+            {selectedExperiment.finished_at && (
+              <div>完成时间: {selectedExperiment.finished_at}</div>
+            )}
+            <div>参数: {JSON.stringify(selectedExperiment.params, null, 2)}</div>
+            <div>指标: {JSON.stringify(selectedExperiment.metrics, null, 2)}</div>
           </div>
         </Card>
       )}
@@ -160,8 +167,8 @@ function formatTime(dateStr: string): string {
   const hours = Math.floor(diff / (1000 * 60 * 60))
   
   if (hours < 1) return '刚刚'
-  if (hours < 24) return `${hours}小时前`
+  if (hours < 24) return hours + '小时前'
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}天前`
+  if (days < 7) return days + '天前'
   return date.toLocaleDateString('zh-CN')
 }
