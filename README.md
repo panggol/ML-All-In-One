@@ -21,18 +21,27 @@
 ## 快速开始
 
 ```bash
-# 后端 API
+# 启动后端 API 和前端 UI
+make dev
+```
+
+访问 http://localhost:3000 查看前端界面。
+
+# 本地开发
+
+如果需要分别启动服务：
+
+```bash
 cd api
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+```
 
-# 前端 UI (新窗口)
+```bash
 cd frontend
 npm install
 npm run dev
 ```
-
-访问 http://localhost:3000 查看前端界面。
 
 ## 功能特性
 

@@ -11,6 +11,7 @@ help:
 	@echo "make format        代码格式化"
 	@echo "make clean         清理缓存"
 	@echo "make run-example   运行示例"
+	@echo "make dev            启动前后端开发环境"
 
 install:
 	pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -43,3 +44,6 @@ run-example:
 
 run-example-xgb:
 	PYTHONPATH=src python examples/credit_fraud.py
+
+dev:
+	docker compose up --build api frontend
