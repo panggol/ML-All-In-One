@@ -25,7 +25,20 @@ jobs:
           pip install --only-binary=:all: torch torchvision
           pip install --only-binary=:all: scikit-learn xgboost lightgbm pandas numpy scipy imbalanced-learn dask polars fastapi uvicorn pydantic pyyaml python-multipart python-jose passlib httpx websockets sqlalchemy alembic python-dotenv loguru tqdm joblib cloudpickle pytest pytest-cov
 
+      - name: Debug
+        run: |
+          echo "PWD: $(pwd)"
+          echo "ls src/mlkit: $(ls src/mlkit/)"
+          echo "ls tests: $(ls tests/)"
+          PYTHONPATH=src python -c "import mlkit; print('mlkit OK:', mlkit.__version__)"
+          PYTHONPATH=src python -c "from mlkit.data import Dataset; print('Dataset OK')"
+
+      - name: Collect tests
+        env:
+          PYTHONPATH: src
+        run: pytest tests/ --collect-only -q 2>&1 | tail -20
+
       - name: Run tests
         env:
           PYTHONPATH: src
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ -v --tb=short 2>&1 | tail -50
