@@ -265,7 +265,7 @@ async def get_history(
         return MonitorHistoryResponse(metric=metric, interval=interval, data=[])
 
     # 查询历史数据
-    col_name, gpu_index = METRIC_MAP[metric]
+    # col_name, gpu_index = METRIC_MAP[metric]  # TODO: 保留用于未来多GPU过滤
 
     query = db.query(monitor_history).filter(
         monitor_history.c.metric_name == metric,

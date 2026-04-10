@@ -105,9 +105,9 @@ export default function Monitor() {
   })()
 
   // 磁盘总量（第一个挂载点）
-  const diskTotal = monitorData?.disk.partitions[0]?.total_gb ?? 0
-  const diskUsed = monitorData?.disk.partitions[0]?.used_gb ?? 0
-  const diskPercent = monitorData?.disk.partitions[0]?.usage_percent ?? 0
+  const diskTotal = monitorData?.disk.partitions?.[0]?.total_gb ?? 0
+  const diskUsed = monitorData?.disk.partitions?.[0]?.used_gb ?? 0
+  const diskPercent = monitorData?.disk.partitions?.[0]?.usage_percent ?? 0
 
   return (
     <div className="space-y-6">
