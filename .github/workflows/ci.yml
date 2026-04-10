@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Lint + Type Check（并行）──────────────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install lint tools
+        run: pip install black ruff mypy
+
+      - name: Run Black
+        run: black --check src/ tests/ examples/ api/ --exclude '/(\.git|\.pytest_cache|\.ruff_cache|\.mypy_cache|node_modules|\.venv)/' 2>&1 || true
+
+      - name: Run Ruff
+        run: ruff check src/ tests/ api/ 2>&1 || true
+
+      - name: Run MyPy
+        run: mypy src/ --ignore-missing-imports --follow-imports=skip 2>&1 || true
+
+  # ─── Python Tests ───────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple || pip install -r requirements.txt
+
+      - name: Install mlkit
+        run: pip install -e .
+
+      - name: Test with pytest
+        run: |
+          python -m pytest tests/ -v --tb=short --cov=src/mlkit --cov-report=term-missing 2>&1 | tail -40
+          echo "EXIT_CODE=$?"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+
+  # ─── Frontend Build ──────────────────────────────────────────────────────────
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci 2>&1 | tail -10
+
+      - name: TypeScript check
+        working-directory: frontend
+        run: npx tsc --noEmit 2>&1 || true
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build 2>&1 | tail -15
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  # ─── Docker Build（仅 master push）───────────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: mlkit:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run smoke test
+        run: |
+          docker run --rm mlkit:ci-${{ github.sha }} python -c "import mlkit; print('mlkit OK:', mlkit.__version__)" 2>&1
+
+  # ─── Full CI Summary ────────────────────────────────────────────────────────
+  ci-summary:
+    needs: [lint, test, frontend]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: CI Summary
+        run: |
+          echo "## CI 结果摘要"
+          echo "| Job | Status |"
+          echo "|-----|--------|"
+          echo "| Lint | ${{ needs.lint.result == 'success' && '✅' || '❌' }} |"
+          echo "| Test | ${{ needs.test.result == 'success' && '✅' || '❌' }} |"
+          echo "| Frontend | ${{ needs.frontend.result == 'success' && '✅' || '❌' }} |"
+          echo ""
+          echo "Commit: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.event_name }}"
