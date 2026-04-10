@@ -121,16 +121,23 @@ async def get_data_distributions(
     if not data_file:
         raise HTTPException(status_code=404, detail="数据集不存在")
 
-    filepath = Path(data_file.filepath)
+    filepath = Path(data_file.filepath).resolve()
+    # 安全检查：防止路径遍历攻击
+    allowed_dirs = [Path("./uploads").resolve(), Path("/home/gem/workspace/agent/workspace/ml-all-in-one/uploads").resolve()]
+    if not any(str(filepath).startswith(str(d)) for d in allowed_dirs):
+        raise HTTPException(status_code=403, detail="路径不在允许范围内")
+
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="数据文件不存在")
 
     try:
-        df = pd.read_csv(filepath)
+        df = pd.read_csv(filepath, nrows=sample_size)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取数据失败: {str(e)}")
 
-    df = _downsample(df, sample_size)
+    # 若文件行数超过 sample_size，则进一步降采样
+    if len(df) > sample_size:
+        df = df.sample(n=sample_size, random_state=42)
 
     # 特征过滤
     if features:
@@ -213,7 +220,11 @@ async def get_data_summary(
     if not data_file:
         raise HTTPException(status_code=404, detail="数据集不存在")
 
-    filepath = Path(data_file.filepath)
+    filepath = Path(data_file.filepath).resolve()
+    allowed_dirs = [Path("./uploads").resolve(), Path("/home/gem/workspace/agent/workspace/ml-all-in-one/uploads").resolve()]
+    if not any(str(filepath).startswith(str(d)) for d in allowed_dirs):
+        raise HTTPException(status_code=403, detail="路径不在允许范围内")
+
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="数据文件不存在")
 

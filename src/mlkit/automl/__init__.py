@@ -98,24 +98,15 @@ class SearchSpace:
                 vals = list(range(s["low"], s["high"] + 1, s["step"]))
                 grids.append([(name, v) for v in vals])
             elif s["type"] == "float":
-                grids.append([(name, v) for v in [s["low"], s["high"]]])
+                # Grid Search 只用边界值（与 Random Search 区分）
+                grids.append([(name, s["low"]), (name, s["high"])])
 
         if not grids:
             return [{}]
 
         points = []
         for combo in itertools.product(*grids):
-            point = dict(combo)
-            # 插值浮点参数
-            for s in self._spaces:
-                if s["type"] == "float":
-                    name = s["name"]
-                    low, high = s["low"], s["high"]
-                    if s.get("log"):
-                        point[name] = np.exp(np.log(low) + np.random.rand() * (np.log(high) - np.log(low)))
-                    else:
-                        point[name] = low + np.random.rand() * (high - low)
-            points.append(point)
+            points.append(dict(combo))
         return points
 
     def random_point(self, rng: np.random.Generator) -> dict:
@@ -158,13 +149,11 @@ def _evaluate_trial(
     from sklearn.metrics import accuracy_score, r2_score
 
     start = time.time()
-    if time.time() - start > timeout:
-        return 0.0, 0.0
 
-    model_type = params.pop("model_type", "sklearn")
-    n_estimators = params.pop("n_estimators", 50)
-    max_depth = params.pop("max_depth", 5)
-    learning_rate = params.pop("learning_rate", 0.1)
+    model_type = params.get("model_type", "sklearn")
+    n_estimators = params.get("n_estimators", 50)
+    max_depth = params.get("max_depth", 5)
+    learning_rate = params.get("learning_rate", 0.1)
 
     try:
         if model_type in ("random_forest",):
@@ -181,7 +170,14 @@ def _evaluate_trial(
             model = create_model("sklearn", model_class="RandomForestClassifier" if task_type == "classification" else "RandomForestRegressor",
                                  n_estimators=n_estimators, max_depth=max_depth, random_state=42)
 
+        # timeout 检查
+        if time.time() - start > timeout:
+            return 0.0, 0.0
+
         model.fit(X_train, y_train)
+
+        if time.time() - start > timeout:
+            return 0.0, 0.0
 
         y_pred_train = model.predict(X_train)
         y_pred_val = model.predict(X_val)
