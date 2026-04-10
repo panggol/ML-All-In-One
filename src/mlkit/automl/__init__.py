@@ -231,7 +231,7 @@ class AutoMLEngine:
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        strategy: Literal["grid", "random"] = "random",
+        strategy: Literal["grid", "random", "bayesian"] = "random",
         n_trials: int = 20,
         search_space: SearchSpace | None = None,
         max_iter_per_trial: int = 100,
@@ -261,6 +261,8 @@ class AutoMLEngine:
 
         if self.strategy == "grid":
             self._run_grid()
+        elif self.strategy == "bayesian":
+            self._run_bayesian()
         else:
             self._run_random()
 
@@ -277,6 +279,23 @@ class AutoMLEngine:
             n_trials=len(self._trials),
             total_time=total_time,
         )
+
+    def _run_bayesian(self) -> None:
+        """Bayesian Optimization（需要 optuna）"""
+        from mlkit.automl.optuna_ import OptunaObjective
+
+        trials = _run_bayesian_search(
+            search_space=self.search_space,
+            X_train=self.X_train,
+            y_train=self.y_train,
+            X_val=self.X_val,
+            y_val=self.y_val,
+            task_type=self.task_type,
+            n_trials=self.n_trials,
+            timeout_per_trial=self.timeout,
+            experiment=self.experiment,
+        )
+        self._trials.extend(trials)
 
     def _run_grid(self) -> None:
         """Grid Search"""
@@ -357,3 +376,95 @@ class AutoMLEngine:
             )
 
         return "\n".join(lines)
+
+
+def _run_bayesian_search(
+    search_space: SearchSpace,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    task_type: str,
+    n_trials: int,
+    timeout_per_trial: float,
+    experiment: Any,
+) -> list[TrialResult]:
+    """执行贝叶斯优化搜索"""
+    from mlkit.automl.optuna_ import OptunaObjective
+
+    try:
+        import optuna
+        from sklearn.metrics import accuracy_score, r2_score
+    except ImportError:
+        print("[AutoML] Bayesian optimization requires optuna. Install: pip install optuna")
+        return []
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    objective = OptunaObjective(
+        task_type=task_type,
+        X_train=X_train,
+        y_train=y_train,
+        X_val=X_val,
+        y_val=y_val,
+        search_space=search_space,
+        timeout_per_trial=timeout_per_trial,
+    )
+
+    study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=42),
+    )
+
+    def wrapped_objective(trial):
+        return objective(trial)
+
+    study.optimize(wrapped_objective, n_trials=n_trials, show_progress_bar=False)
+
+    trials = []
+    for i, study_trial in enumerate(study.trials):
+        params = {k: v for k, v in study_trial.params.items()}
+        val_score = -study_trial.value  # negate because we minimized negative val_score
+
+        trial_result = TrialResult(
+            trial_id=i,
+            params=params,
+            train_score=val_score,  # approximate
+            val_score=val_score,
+            train_time=study_trial.duration.total_seconds() if study_trial.duration else 0.0,
+        )
+        trials.append(trial_result)
+
+        if experiment:
+            experiment.record_metric("val_score", val_score, i)
+
+        best = max(t.val_score for t in trials)
+        print(f"  [AutoML/Bayesian] Trial {i + 1}/{n_trials} | Val: {val_score:.4f} | Best: {best:.4f}")
+
+    return trials
+
+
+# 向后兼容：导出命名空间类（满足需求文档示例 API）
+class BayesianOptimization(AutoMLEngine):
+    """Bayesian Optimization = AutoMLEngine(strategy='bayesian')"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("strategy", "bayesian")
+        super().__init__(*args, **kwargs)
+
+
+class GridSearch(AutoMLEngine):
+    """Grid Search = AutoMLEngine(strategy='grid')"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("strategy", "grid")
+        super().__init__(*args, **kwargs)
+
+
+class RandomSearch(AutoMLEngine):
+    """Random Search = AutoMLEngine(strategy='random')"""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("strategy", "random")
+        super().__init__(*args, **kwargs)
+
+
+# 导出
+__all__ = ["AutoMLEngine", "SearchSpace", "AutoMLResult", "TrialResult", "BayesianOptimization", "GridSearch", "RandomSearch"]

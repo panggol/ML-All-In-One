@@ -86,3 +86,34 @@ def test_automl_engine_regression():
 
     assert len(result.trials) == 3
     assert result.best_val_score is not None
+
+
+def test_automl_engine_bayesian():
+    """测试贝叶斯优化（需要 optuna）"""
+    try:
+        import optuna
+    except ImportError:
+        pytest.skip("optuna not installed, skipping Bayesian test")
+
+    from mlkit.automl import AutoMLEngine
+
+    rng = np.random.default_rng(42)
+    X_train = rng.normal(size=(200, 10))
+    y_train = (X_train[:, 0] > 0).astype(int)
+    X_val = rng.normal(size=(50, 10))
+    y_val = (X_val[:, 0] > 0).astype(int)
+
+    engine = AutoMLEngine(
+        task_type="classification",
+        X_train=X_train, y_train=y_train,
+        X_val=X_val, y_val=y_val,
+        strategy="bayesian",
+        n_trials=3,
+    )
+
+    result = engine.run()
+
+    assert len(result.trials) == 3
+    assert result.strategy == "bayesian"
+    assert all(isinstance(t.val_score, float) for t in result.trials)
+    print(f"Bayesian search best: {result.best_val_score:.4f}")
