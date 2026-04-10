@@ -2,6 +2,7 @@
 实验路由
 """
 from fastapi import APIRouter, Depends, HTTPException
+router = APIRouter(redirect_slashes=False)
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,7 +10,6 @@ from typing import List, Optional
 from api.database import Experiment, User, get_db
 from api.auth import get_current_user
 
-router = APIRouter()
 
 # ============ Pydantic 模型 ============
 
@@ -31,7 +31,7 @@ class CompareRequest(BaseModel):
     experiment_ids: List[int]
 
 
-@router.get("/", response_model=List[ExperimentResponse])
+@router.get("", response_model=List[ExperimentResponse])
 async def list_experiments(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)

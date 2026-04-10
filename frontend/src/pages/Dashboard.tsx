@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Activity, TrendingUp, Clock, Award, Upload, Brain, LineChart } from 'lucide-react'
 import Card from '../components/Card'
 import StatCard from '../components/StatCard'
@@ -11,31 +12,8 @@ interface ModelRecord {
   time: string
 }
 
-const quickActions = [
-  {
-    icon: Upload,
-    title: '上传数据集',
-    description: '支持 CSV、Excel 格式',
-    action: 'upload',
-    onClick: () => document.getElementById('file-upload')?.click()
-  },
-  {
-    icon: Brain,
-    title: '自动机器学习',
-    description: '一键找到最优模型和参数',
-    action: 'automl',
-    onClick: () => window.location.href = '/training'
-  },
-  {
-    icon: LineChart,
-    title: '模型预测',
-    description: '批量预测新数据',
-    action: 'predict',
-    onClick: () => window.location.href = '/experiments'
-  },
-]
-
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [recentModels, setRecentModels] = useState<ModelRecord[]>([])
   const [stats, setStats] = useState({
@@ -44,6 +22,30 @@ export default function Dashboard() {
     runtime: '0h',
     bestAccuracy: '0%'
   })
+
+  const quickActions = [
+    {
+      icon: Upload,
+      title: '上传数据集',
+      description: '支持 CSV、Excel 格式',
+      action: 'upload',
+      onClick: () => document.getElementById('file-upload')?.click()
+    },
+    {
+      icon: Brain,
+      title: '自动机器学习',
+      description: '一键找到最优模型和参数',
+      action: 'automl',
+      onClick: () => navigate('/training')
+    },
+    {
+      icon: LineChart,
+      title: '模型预测',
+      description: '批量预测新数据',
+      action: 'predict',
+      onClick: () => navigate('/experiments')
+    },
+  ]
 
   useEffect(() => {
     loadDashboardData()

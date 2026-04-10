@@ -382,7 +382,7 @@ def _run_training(job_id: int, db_url: str):
 
 # ============ API 路由 ============
 
-@router.post("/", response_model=TrainJobResponse)
+@router.post("", response_model=TrainJobResponse)
 async def create_training(
     request: TrainRequest,
     background_tasks: BackgroundTasks,
@@ -443,7 +443,7 @@ async def create_training(
     )
 
 
-@router.get("/", response_model=List[TrainJobResponse])
+@router.get("", response_model=List[TrainJobResponse])
 async def list_jobs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

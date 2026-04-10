@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Sparkles, Database, LineChart, LogOut, User } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
@@ -28,6 +28,7 @@ function PrivateRoute() {
 // 主布局
 function Layout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [user, setUser] = useState<{ username: string; email: string } | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -51,7 +52,7 @@ function Layout() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    window.location.href = '/login'
+    navigate('/login')
   }
 
   return (
@@ -72,7 +73,7 @@ function Layout() {
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id)
-                  window.location.href = '/' + tab.id
+                  navigate('/' + tab.id)
                 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-150 ${
                   activeTab === tab.id
