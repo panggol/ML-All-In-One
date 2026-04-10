@@ -5,7 +5,7 @@ mlkit - ML All In One
 """
 
 from mlkit.config import Config, load_config
-from mlkit.hooks import Hook
+from mlkit.hooks import Hook, PerformanceMonitorHook
 from mlkit.model import BaseModel, SKLearnModel, create_model
 from mlkit.registry import (
     DATASET_REGISTRY,
@@ -54,6 +54,7 @@ __all__ = [
     "create_model",
     # Hooks
     "Hook",
+    "PerformanceMonitorHook",
     # Runner
     "Runner",
     "create_runner",

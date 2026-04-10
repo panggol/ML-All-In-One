@@ -468,6 +468,256 @@ class ExperimentTrackHook(Hook):
         self.experiment.finish(status="completed" if not getattr(runner, "stop_training", False) else "interrupted")
 
 
+class PerformanceMonitorHook(Hook):
+    """性能监控 Hook
+
+    后台线程采集系统资源指标（CPU / 内存 / GPU），
+    通过 LoggerHook 格式输出到训练日志，并支持记录到 Experiment。
+
+    用法:
+        hook = PerformanceMonitorHook(interval=5, log_to_stdout=True)
+        runner.register_hook(hook, priority=5)
+
+    输出示例:
+        [Performance] Epoch 3 | CPU: 78% | Mem: 4.2/16.0GB (26%) | GPU: 65% | Speed: 1420 s/s | ETA: 4m 23s
+    """
+
+    def __init__(
+        self,
+        interval: float = 5.0,
+        log_to_stdout: bool = True,
+        record_to_experiment: bool = False,
+        experiment: "Experiment | None" = None,
+    ):
+        """
+        Args:
+            interval: 采样间隔（秒）
+            log_to_stdout: 是否输出到 stdout
+            record_to_experiment: 是否记录到 Experiment
+            experiment: Experiment 实例（record_to_experiment=True 时必传）
+        """
+        super().__init__()
+        self.interval = interval
+        self.log_to_stdout = log_to_stdout
+        self.record_to_experiment = record_to_experiment
+        self.experiment = experiment
+
+        self._stop_event: "threading.Event | None" = None
+        self._monitor_thread: "threading.Thread | None" = None
+        self._cpu_samples: list[float] = []
+        self._mem_samples: list[float] = []
+        self._gpu_samples: list[float] = []
+        self._speed_samples: list[float] = []
+        self._total_samples_processed: int = 0
+        self._epoch_start_time: float = 0
+        self._epoch_samples: int = 0
+        self._has_gpu: bool = False
+        self._runner: "Hook | None" = None
+
+        try:
+            import psutil
+            self._psutil = psutil
+        except ImportError:
+            self._psutil = None
+
+        try:
+            import torch
+            self._has_gpu = torch.cuda.is_available()
+            self._torch = torch
+        except ImportError:
+            self._has_gpu = False
+            self._torch = None
+
+    def before_run(self, runner: "Runner") -> None:
+        """训练开始，启动监控线程"""
+        self._reset()
+        self._stop_event = __import__("threading").Event()
+        self._monitor_thread = __import__("threading").Thread(
+            target=self._monitor_loop,
+            args=(runner,),
+            daemon=True,
+        )
+        self._monitor_thread.start()
+
+    def after_run(self, runner: "Runner") -> None:
+        """训练结束，停止监控线程"""
+        self._stop()
+        self._log_summary()
+
+    def before_epoch(self, runner: "Runner", epoch: int) -> None:
+        """每个 epoch 开始时重置速度计数"""
+        self._epoch_start_time = __import__("time").time()
+        self._epoch_samples = self._total_samples_processed
+
+    def after_epoch(self, runner: "Runner", epoch: int, logs: dict) -> None:
+        """每个 epoch 结束后记录指标"""
+        if not self.record_to_experiment or not self.experiment:
+            return
+
+        import statistics
+
+        def safe_mean(arr):
+            return float(statistics.mean(arr)) if arr else 0.0
+
+        def safe_peak(arr):
+            return float(max(arr)) if arr else 0.0
+
+        self.experiment.record_metric("cpu_avg", safe_mean(self._cpu_samples), epoch)
+        self.experiment.record_metric("cpu_peak", safe_peak(self._cpu_samples), epoch)
+        self.experiment.record_metric("memory_peak_gb", safe_peak(self._mem_samples), epoch)
+        if self._has_gpu:
+            self.experiment.record_metric("gpu_avg", safe_mean(self._gpu_samples), epoch)
+            self.experiment.record_metric("gpu_peak", safe_peak(self._gpu_samples), epoch)
+        speed_samples = self._speed_samples[-20:] if self._speed_samples else []
+        if speed_samples:
+            self.experiment.record_metric("speed_avg", safe_mean(speed_samples), epoch)
+
+    def _reset(self) -> None:
+        """重置采样数据"""
+        self._cpu_samples.clear()
+        self._mem_samples.clear()
+        self._gpu_samples.clear()
+        self._speed_samples.clear()
+        self._total_samples_processed = 0
+        self._epoch_samples = 0
+        self._epoch_start_time = 0.0
+
+    def _stop(self) -> None:
+        """停止监控线程"""
+        if self._stop_event:
+            self._stop_event.set()
+        if self._monitor_thread and self._monitor_thread.is_alive():
+            self._monitor_thread.join(timeout=3.0)
+
+    def _monitor_loop(self, runner: "Runner") -> None:
+        """后台监控线程主循环"""
+        import time
+
+        while not (self._stop_event and self._stop_event.is_set()):
+            if not self.log_to_stdout:
+                time.sleep(self.interval)
+                continue
+
+            cpu_pct = self._sample_cpu()
+            mem_gb = self._sample_memory()
+            gpu_pct = self._sample_gpu()
+
+            # 速度估算（从 Runner 获取）
+            speed = self._estimate_speed(runner)
+
+            if speed is not None:
+                self._speed_samples.append(speed)
+
+            # 输出日志
+            if self.log_to_stdout:
+                self._print_status(cpu_pct, mem_gb, gpu_pct, speed, runner)
+
+            time.sleep(self.interval)
+
+    def _sample_cpu(self) -> float:
+        if self._psutil:
+            val = self._psutil.cpu_percent(interval=None)
+            self._cpu_samples.append(val)
+            return val
+        return 0.0
+
+    def _sample_memory(self) -> float:
+        if self._psutil:
+            mem = self._psutil.virtual_memory()
+            val = mem.used / (1024**3)  # GB
+            self._mem_samples.append(val)
+            return val
+        return 0.0
+
+    def _sample_gpu(self) -> float:
+        if not self._has_gpu or not self._torch:
+            return 0.0
+        try:
+            val = self._torch.cuda.memory_allocated(0) / max(self._torch.cuda.get_device_properties(0).total_memory, 1) * 100
+            self._gpu_samples.append(val)
+            return val
+        except Exception:
+            return 0.0
+
+    def _estimate_speed(self, runner: "Runner") -> "float | None":
+        """估算当前训练速度（样本/秒）"""
+        elapsed = __import__("time").time() - self._epoch_start_time
+        if elapsed < 1.0:
+            return None
+        current_total = self._total_samples_processed
+        delta_samples = current_total - self._epoch_samples
+        return delta_samples / elapsed if delta_samples > 0 else None
+
+    def _print_status(
+        self,
+        cpu_pct: float,
+        mem_gb: float,
+        gpu_pct: float,
+        speed: "float | None",
+        runner: "Runner",
+    ) -> None:
+        import time
+
+        # 预估剩余时间
+        eta = self._estimate_eta(runner, speed)
+
+        # 获取当前 epoch 和 iter
+        epoch = getattr(runner, "current_epoch", 0)
+        total_epochs = getattr(runner, "num_epochs", 0) or "?"
+
+        parts = []
+        parts.append(f"CPU: {cpu_pct:.0f}%")
+        parts.append(f"Mem: {mem_gb:.1f}GB")
+        if self._has_gpu:
+            parts.append(f"GPU: {gpu_pct:.0f}%")
+        if speed is not None:
+            parts.append(f"Speed: {speed:.0f} s/s")
+        if eta:
+            parts.append(f"ETA: {eta}")
+
+        marker = ""
+        if hasattr(runner, "current_epoch") and hasattr(runner, "num_epochs"):
+            total = runner.num_epochs or 1
+            pct = runner.current_epoch / total * 100
+            marker = f" [{runner.current_epoch}/{total} ({pct:.0f}%)]"
+
+        print(f"[Performance]{marker} {' | '.join(parts)}")
+
+    def _estimate_eta(self, runner: "Runner", speed: "float | None") -> "str | None":
+        """预估剩余时间"""
+        if speed is None or speed <= 0:
+            return None
+        if not hasattr(runner, "current_epoch") or not hasattr(runner, "num_epochs"):
+            return None
+        remaining_epochs = (runner.num_epochs or 1) - runner.current_epoch
+        if remaining_epochs <= 0:
+            return None
+        elapsed = __import__("time").time() - self._epoch_start_time
+        if elapsed < 1.0:
+            return None
+        epoch_duration = elapsed
+        total_remaining = remaining_epochs * epoch_duration
+        m, s = divmod(int(total_remaining), 60)
+        h, m = divmod(m, 60)
+        if h > 0:
+            return f"{h}h {m}m"
+        return f"{m}m {s}s"
+
+    def _log_summary(self) -> None:
+        """训练结束后打印汇总"""
+        if not self._cpu_samples:
+            return
+        import statistics
+
+        print("\n[Performance] 训练汇总:")
+        print(f"  CPU 平均: {statistics.mean(self._cpu_samples):.1f}% | 峰值: {max(self._cpu_samples):.1f}%")
+        print(f"  内存峰值: {max(self._mem_samples):.1f} GB")
+        if self._has_gpu and self._gpu_samples:
+            print(f"  GPU 平均: {statistics.mean(self._gpu_samples):.1f}% | 峰值: {max(self._gpu_samples):.1f}%")
+        if self._speed_samples:
+            print(f"  平均速度: {statistics.mean(self._speed_samples[-20:]):.0f} 样本/秒")
+
+
 # ── Callback 管理器 ──────────────────────────────────────────
 
 
