@@ -6,7 +6,7 @@ import sys
 import threading
 import pandas as pd
 import joblib
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -145,7 +145,7 @@ def _run_training(job_id: int, db_url: str):
 
         # 更新状态
         job.status = "running"
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(timezone.utc)
         db.commit()
 
         training_mgr.update(job_id, status="running", progress=0, logs="开始训练...\n")
@@ -273,7 +273,7 @@ def _run_training(job_id: int, db_url: str):
                 if training_mgr.is_stopped(job_id):
                     training_mgr.update(job_id, status="stopped", logs="训练已停止\n")
                     job.status = "stopped"
-                    job.finished_at = datetime.utcnow()
+                    job.finished_at = datetime.now(timezone.utc)
                     db.commit()
                     return
 
@@ -284,7 +284,7 @@ def _run_training(job_id: int, db_url: str):
                     if training_mgr.is_stopped(job_id):
                         training_mgr.update(job_id, status="stopped", logs="训练已停止\n")
                         job.status = "stopped"
-                        job.finished_at = datetime.utcnow()
+                        job.finished_at = datetime.now(timezone.utc)
                         db.commit()
                         return
 
@@ -356,7 +356,7 @@ def _run_training(job_id: int, db_url: str):
                 if training_mgr.is_stopped(job_id):
                     training_mgr.update(job_id, status="stopped", logs="训练已停止\n")
                     job.status = "stopped"
-                    job.finished_at = datetime.utcnow()
+                    job.finished_at = datetime.now(timezone.utc)
                     db.commit()
                     return
 
@@ -441,7 +441,7 @@ def _run_training(job_id: int, db_url: str):
         job.metrics = metrics
         job.metrics_curve = metrics_curve
         job.checkpoint_path = model_path
-        job.finished_at = datetime.utcnow()
+        job.finished_at = datetime.now(timezone.utc)
         db.commit()
 
         # 8. 同时在 TrainedModel 表中注册
@@ -467,7 +467,7 @@ def _run_training(job_id: int, db_url: str):
         if job:
             job.status = "failed"
             job.error_message = str(e)
-            job.finished_at = datetime.utcnow()
+            job.finished_at = datetime.now(timezone.utc)
             db.commit()
     finally:
         # 清理临时过滤后的 CSV 文件

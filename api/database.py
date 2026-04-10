@@ -4,7 +4,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ml_all_in_one.db")
@@ -38,7 +38,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # 关联
     data_files = relationship("DataFile", back_populates="owner", cascade="all, delete-orphan")
@@ -58,7 +58,7 @@ class DataFile(Base):
     rows = Column(Integer, default=0)
     columns = Column(JSON, default=list)  # 列名列表
     dtypes = Column(JSON, default=dict)   # 列类型
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # 关联
     owner = relationship("User", back_populates="data_files")
@@ -75,7 +75,7 @@ class Experiment(Base):
     params = Column(JSON, default=dict)
     metrics = Column(JSON, default=dict)
     status = Column(String(20), default="pending")  # pending/running/completed/failed
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     finished_at = Column(DateTime, nullable=True)
     
     # 关联
@@ -108,7 +108,7 @@ class TrainingJob(Base):
     error_message = Column(Text, nullable=True)
     checkpoint_path = Column(String(500), nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     
@@ -131,4 +131,4 @@ class TrainedModel(Base):
     metrics = Column(JSON, default=dict)
     config = Column(JSON, default=dict)  # 模型配置
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

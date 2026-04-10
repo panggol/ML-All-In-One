@@ -10,7 +10,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..'))
 
@@ -369,7 +369,7 @@ async def transform_and_save(
         size=os.path.getsize(output_path),
         rows=len(df_transformed),
         columns=list(df_transformed.columns),
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(new_data_file)
     db.commit()
