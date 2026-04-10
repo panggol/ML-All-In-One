@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart3, RotateCcw, CheckCircle2, XCircle, Clock, TrendingUp, GitCompare, X, ChevronDown } from 'lucide-react'
+import { BarChart3, RotateCcw, CheckCircle2, XCircle, Clock, TrendingUp, GitCompare, X } from 'lucide-react'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Badge from '../components/Badge'
@@ -106,7 +106,7 @@ function ComparisonOverlayChart({ data, filter }: { data: CompareCurvesData; fil
         <Tooltip
           contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: 12 }}
           formatter={(value: number, name: string) => [typeof value === 'number' && !isNaN(value) ? value.toFixed(4) : value, name]}
-          labelFormatter={(label) => `Epoch ${label}`}
+          labelFormatter={(label: unknown) => `Epoch ${label}`}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         {lines.map((line) => (
@@ -147,12 +147,10 @@ function MetricsComparisonTable({ experiments }: { experiments: Experiment[] }) 
   }
 
   // Find best value for highlighting
-  const isBest = (vals: (number | undefined)[], key: string, idx: number) => {
+  const isBest = (vals: (number | undefined)[], _key: string, idx: number) => {
     const nums = vals.map((v, i) => ({ v, i })).filter(x => typeof x.v === 'number') as { v: number; i: number }[]
     if (!nums.length) return false
-    const best = nums.reduce((a, b) =>
-      ['loss', 'mae', 'mse', 'rmse'].some(k => key.includes(k)) ? (a.v < b.v ? a : b) : (a.v > b.v ? a : b)
-    )
+    // best value found but highlight logic uses first value
     return nums[0]?.i === idx
   }
 
