@@ -14,8 +14,10 @@ import JobStatusBar from '../components/monitor/JobStatusBar'
 import SystemInfoBar from '../components/monitor/SystemInfoBar'
 import Card from '../components/Card'
 import { Cpu, HardDrive, HardDriveDownload, Gauge } from 'lucide-react'
-
-const MAX_BUFFER_SIZE = 60 // 最多 60 条数据（5 分钟 × 12 条/分钟）
+import {
+  MAX_BUFFER_SIZE,
+  POLL_INTERVAL_MS,
+} from '../constants/monitor'
 
 function formatLastUpdated(timestamp: string): string {
   try {
@@ -60,7 +62,7 @@ export default function Monitor() {
     queryKey: ['monitor', 'overview'],
     queryFn: () => monitorApi.getOverview(),
     select: (res) => res.data as MonitorOverviewResponse,
-    refetchInterval: 5000,
+    refetchInterval: POLL_INTERVAL_MS,
     retry: 2,
   })
 

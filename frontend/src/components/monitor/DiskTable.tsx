@@ -4,6 +4,7 @@
 import { clsx } from 'clsx'
 import UsageProgressBar from './UsageProgressBar'
 import type { DiskPartition } from '../../api/monitor'
+import { getUsageColorClass } from '../../constants/monitor'
 
 interface DiskTableProps {
   partitions: DiskPartition[]
@@ -76,8 +77,7 @@ export default function DiskTable({
                   </div>
                   <span className={clsx(
                     'text-xs font-medium w-10 text-right',
-                    part.usage_percent >= 85 ? 'text-red-500' :
-                    part.usage_percent >= 60 ? 'text-amber-500' : 'text-emerald-600'
+                    getUsageColorClass(part.usage_percent)
                   )}>
                     {part.usage_percent.toFixed(1)}%
                   </span>

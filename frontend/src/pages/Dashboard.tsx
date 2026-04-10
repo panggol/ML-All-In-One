@@ -6,6 +6,10 @@ import Card from '../components/Card'
 import StatCard from '../components/StatCard'
 import { trainApi, experimentApi } from '../api'
 import { monitorApi, type MonitorOverviewResponse } from '../api/monitor'
+import {
+  DASHBOARD_POLL_INTERVAL_MS,
+  getUsageBarColor,
+} from '../constants/monitor'
 
 interface ModelRecord {
   name: string
@@ -30,7 +34,7 @@ export default function Dashboard() {
     queryKey: ['monitor', 'overview'],
     queryFn: () => monitorApi.getOverview(),
     select: (res) => res.data as MonitorOverviewResponse,
-    refetchInterval: 30000,
+    refetchInterval: DASHBOARD_POLL_INTERVAL_MS,
     retry: 1,
   })
 
@@ -213,10 +217,7 @@ export default function Dashboard() {
               {monitorData?.gpu.available && monitorData.gpu.devices.length > 0 && (
                 <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      monitorData.gpu.devices[0].memory_usage_percent >= 85 ? 'bg-red-500' :
-                      monitorData.gpu.devices[0].memory_usage_percent >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full transition-all duration-500 ${getUsageBarColor(monitorData.gpu.devices[0].memory_usage_percent)}`}
                     style={{ width: `${monitorData.gpu.devices[0].memory_usage_percent}%` }}
                   />
                 </div>
@@ -235,10 +236,7 @@ export default function Dashboard() {
               {monitorData?.disk.partitions?.[0] && (
                 <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      monitorData.disk.partitions[0].usage_percent >= 85 ? 'bg-red-500' :
-                      monitorData.disk.partitions[0].usage_percent >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full transition-all duration-500 ${getUsageBarColor(monitorData.disk.partitions[0].usage_percent)}`}
                     style={{ width: `${monitorData.disk.partitions[0].usage_percent}%` }}
                   />
                 </div>

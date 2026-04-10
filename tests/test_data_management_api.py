@@ -40,15 +40,34 @@ def override_get_db():
         session.close()
 
 
+@pytest.fixture(autouse=True)
+def _db_override():
+    """
+    Per-test setup & teardown for the database dependency override.
+
+    Why this exists:
+    - Other test files (test_api_automl.py, test_api_viz.py, etc.) call
+      `app.dependency_overrides.clear()` in their fixture teardown.
+    - We cannot rely on a module-level override (set at import time) because
+      it has no pytest-controlled teardown — other files' teardowns can wipe it.
+    - This autouse fixture guarantees the override is active for every test
+      and is properly cleaned up afterward, regardless of test ordering.
+
+    Teardown order: tables are dropped by db_session (LIFO), then the override
+    is cleared here.  This is safe because by this point no more requests will
+    use the override.
+    """
+    app.dependency_overrides[get_db] = override_get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
+
 @pytest.fixture(scope="function")
 def db_session():
     """
     Each test gets a fresh in-memory database with all tables created.
-    Re-sets the dependency override here (not just at module import) to guard
-    against app.dependency_overrides.clear() called by other test modules.
+    Tables are dropped at teardown to ensure clean state for the next test.
     """
-    # Re-apply override in case another test file called app.dependency_overrides.clear()
-    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.create_all(bind=_engine)
     session = TestingSessionLocal()
     session.commit()
