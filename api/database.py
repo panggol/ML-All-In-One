@@ -102,6 +102,7 @@ class TrainingJob(Base):
     progress = Column(Integer, default=0)            # 0-100
     current_iter = Column(Integer, default=0)
     metrics = Column(JSON, default=dict)               # 最终指标
+    metrics_curve = Column(JSON, default=dict)          # 每个epoch的曲线数据
     logs = Column(Text, default="")                   # 训练日志
     
     error_message = Column(Text, nullable=True)

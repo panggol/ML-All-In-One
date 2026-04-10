@@ -45,8 +45,9 @@ class TrainJobResponse(BaseModel):
     progress: int
     current_iter: int
     metrics: dict
-    logs: str
-    created_at: str
+    metrics_curve: dict = {}
+    logs: str = ""
+    created_at: str = ""
 
     class Config:
         from_attributes = True
@@ -415,6 +416,7 @@ def _run_training(job_id: int, db_url: str):
         job.status = "completed"
         job.progress = 100
         job.metrics = metrics
+        job.metrics_curve = metrics_curve
         job.checkpoint_path = model_path
         job.finished_at = datetime.utcnow()
         db.commit()
@@ -565,7 +567,7 @@ async def get_job_status(
         "progress": status_data.get("progress", job.progress),
         "current_iter": status_data.get("current_iter", job.current_iter),
         "metrics": job.metrics or {},
-        "metrics_curve": status_data.get("metrics_curve", {
+        "metrics_curve": job.metrics_curve or status_data.get("metrics_curve", {
             "epochs": [],
             "train_loss": [],
             "val_loss": [],
