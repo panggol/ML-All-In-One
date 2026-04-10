@@ -74,6 +74,13 @@ class TrainingManager:
                 "progress": 0,
                 "current_iter": 0,
                 "logs": "",
+                "metrics_curve": {
+                    "epochs": [],
+                    "train_loss": [],
+                    "val_loss": [],
+                    "train_accuracy": [],
+                    "val_accuracy": [],
+                },
             }
             self._stop_events[job_id] = threading.Event()
 
@@ -217,15 +224,24 @@ def _run_training(job_id: int, db_url: str):
         training_mgr.update(job_id, logs=f"训练集: {len(X_train)} 样本, 测试集: {len(X_test)} 样本\n")
 
         # 4. 训练模型（支持增量学习的模型使用 partial_fit 模拟进度）
+        # 同时在每个 epoch 记录 train/val metrics 用于曲线图
         if hasattr(runner.model.model, "partial_fit"):
             # 增量学习模型：分批训练，可查询进度
             from sklearn.utils import shuffle
+            from sklearn.metrics import accuracy_score, mean_squared_error
             import numpy as np
 
             epochs = job.params.get("epochs", 10)
             batch_size = job.params.get("batch_size", 32)
             total_steps = epochs * max(1, len(X_train) // batch_size)
             step = 0
+            metrics_curve = {
+                "epochs": [],
+                "train_loss": [],
+                "val_loss": [],
+                "train_accuracy": [],
+                "val_accuracy": [],
+            }
 
             classes = np.unique(y_train) if job.task_type == "classification" else None
 
@@ -268,6 +284,29 @@ def _run_training(job_id: int, db_url: str):
                     job.progress = progress
                     job.current_iter = step
                     db.commit()
+
+                # 每个 epoch 结束后评估 train/val metrics，记录到曲线
+                y_train_pred = runner.model.predict(X_train)
+                y_val_pred = runner.model.predict(X_test)
+
+                if job.task_type == "classification":
+                    train_acc = float(accuracy_score(y_train, y_train_pred))
+                    val_acc = float(accuracy_score(y_test, y_val_pred))
+                    train_loss = 1.0 - train_acc  # 代理 loss
+                    val_loss = 1.0 - val_acc
+                else:
+                    train_loss = float(mean_squared_error(y_train, y_train_pred))
+                    val_loss = float(mean_squared_error(y_test, y_val_pred))
+                    train_acc = 0.0
+                    val_acc = 0.0
+
+                metrics_curve["epochs"].append(epoch + 1)
+                metrics_curve["train_loss"].append(train_loss)
+                metrics_curve["val_loss"].append(val_loss)
+                metrics_curve["train_accuracy"].append(train_acc)
+                metrics_curve["val_accuracy"].append(val_acc)
+
+                training_mgr.update(job_id, metrics_curve=metrics_curve)
         else:
             # 非增量学习模型：直接 fit，用进度条模拟
             import time
@@ -315,26 +354,56 @@ def _run_training(job_id: int, db_url: str):
 
             training_mgr.update(job_id, progress=95, logs="训练完成，评估中...\n")
 
-        # 5. 在测试集上评估
-        y_pred = runner.model.predict(X_test)
+        # 5. 在测试集和训练集上评估，生成 metrics_curve
+        y_train_pred = runner.model.predict(X_train)
+        y_test_pred = runner.model.predict(X_test)
 
-        metrics = {}
+        metrics_curve = {
+            "epochs": [1],
+            "train_loss": [],
+            "val_loss": [],
+            "train_accuracy": [],
+            "val_accuracy": [],
+        }
+
         if job.task_type == "classification":
             from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-            metrics["accuracy"] = float(accuracy_score(y_test, y_pred))
-            metrics["f1"] = float(f1_score(y_test, y_pred, average="weighted", zero_division=0))
-            metrics["precision"] = float(precision_score(y_test, y_pred, average="weighted", zero_division=0))
-            metrics["recall"] = float(recall_score(y_test, y_pred, average="weighted", zero_division=0))
+
+            train_acc = float(accuracy_score(y_train, y_train_pred))
+            val_acc = float(accuracy_score(y_test, y_test_pred))
+            metrics_curve["train_accuracy"] = [train_acc]
+            metrics_curve["val_accuracy"] = [val_acc]
+            # 代理 loss（1 - accuracy，越小越好）
+            metrics_curve["train_loss"] = [round(1.0 - train_acc, 6)]
+            metrics_curve["val_loss"] = [round(1.0 - val_acc, 6)]
+
+            metrics = {
+                "accuracy": val_acc,
+                "f1": float(f1_score(y_test, y_test_pred, average="weighted", zero_division=0)),
+                "precision": float(precision_score(y_test, y_test_pred, average="weighted", zero_division=0)),
+                "recall": float(recall_score(y_test, y_test_pred, average="weighted", zero_division=0)),
+            }
         else:
             from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-            metrics["mse"] = float(mean_squared_error(y_test, y_pred))
-            metrics["mae"] = float(mean_absolute_error(y_test, y_pred))
-            metrics["r2"] = float(r2_score(y_test, y_pred))
+
+            train_mse = float(mean_squared_error(y_train, y_train_pred))
+            val_mse = float(mean_squared_error(y_test, y_test_pred))
+            metrics_curve["train_loss"] = [train_mse]
+            metrics_curve["val_loss"] = [val_mse]
+            metrics_curve["train_accuracy"] = [0.0]
+            metrics_curve["val_accuracy"] = [0.0]
+
+            metrics = {
+                "mse": val_mse,
+                "mae": float(mean_absolute_error(y_test, y_test_pred)),
+                "r2": float(r2_score(y_test, y_test_pred)),
+            }
 
         training_mgr.update(
             job_id,
             status="completed",
             progress=100,
+            metrics_curve=metrics_curve,
             logs="训练完成！\n",
         )
 
@@ -496,6 +565,13 @@ async def get_job_status(
         "progress": status_data.get("progress", job.progress),
         "current_iter": status_data.get("current_iter", job.current_iter),
         "metrics": job.metrics or {},
+        "metrics_curve": status_data.get("metrics_curve", {
+            "epochs": [],
+            "train_loss": [],
+            "val_loss": [],
+            "train_accuracy": [],
+            "val_accuracy": [],
+        }),
         "logs": status_data.get("logs", job.logs or ""),
     }
 
