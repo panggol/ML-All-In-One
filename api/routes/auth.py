@@ -43,7 +43,7 @@ class UserResponse(BaseModel):
 
 # ============ 路由 ============
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """用户注册"""
     # 检查用户名是否存在
