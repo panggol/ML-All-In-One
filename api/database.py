@@ -1,7 +1,7 @@
 """
 数据库配置和模型
 """
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, relationship
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON
 from datetime import datetime, timezone
 import os
@@ -15,7 +15,9 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 def get_db():
     """依赖注入：获取数据库会话"""

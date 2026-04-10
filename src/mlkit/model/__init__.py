@@ -328,6 +328,9 @@ class PyTorchModel(BaseModel):
                     else:
                         loss = self.criterion(outputs, batch_y)
                 else:
+                    # 回归任务：确保 batch_y shape 与 outputs 匹配，避免 PyTorch 广播警告
+                    if batch_y.dim() == 1:
+                        batch_y = batch_y.unsqueeze(-1)
                     loss = self.criterion(outputs, batch_y)
 
                 # 反向传播
