@@ -512,7 +512,6 @@ class PerformanceMonitorHook(Hook):
         self._epoch_start_time: float = 0
         self._epoch_samples: int = 0
         self._has_gpu: bool = False
-        self._runner: "Hook | None" = None
 
         try:
             import psutil
