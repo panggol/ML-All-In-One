@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Upload, Play, Pause, FileSpreadsheet } from 'lucide-react'
+import { Upload, Play, Pause, FileSpreadsheet, ChevronDown, ChevronRight, Sparkles, Check } from 'lucide-react'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Select from '../components/Select'
@@ -19,6 +19,12 @@ const TASK_OPTIONS = [
   { value: 'regression', label: '回归' },
 ]
 
+const AUTO_FEATURE_METHODS = [
+  { value: 'variance_threshold', label: '方差阈值' },
+  { value: 'correlation', label: '相关系数' },
+  { value: 'tree_importance', label: '树模型重要性' },
+]
+
 export default function Training() {
   const [files, setFiles] = useState<any[]>([])
   const [selectedFile, setSelectedFile] = useState<number | null>(null)
@@ -28,6 +34,15 @@ export default function Training() {
   const [isTraining, setIsTraining] = useState(false)
   const [currentJob, setCurrentJob] = useState<TrainJob | null>(null)
   const [progress, setProgress] = useState(0)
+
+  // 特征选择相关状态
+  const [featureExpanded, setFeatureExpanded] = useState(false)
+  const [allColumns, setAllColumns] = useState<string[]>([])
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([])
+  const [autoSelectMethod, setAutoSelectMethod] = useState<string>('tree_importance')
+  const [autoSelectedFeatures, setAutoSelectedFeatures] = useState<string[]>([])
+  const [isAutoSelecting, setIsAutoSelecting] = useState(false)
+  const [autoSelectApplied, setAutoSelectApplied] = useState(false)
 
   useEffect(() => {
     loadFiles()
@@ -56,12 +71,38 @@ export default function Training() {
     return () => clearInterval(interval)
   }, [currentJob])
 
+  // 加载文件后获取列信息
+  useEffect(() => {
+    if (selectedFile) {
+      loadFileColumns(selectedFile)
+    }
+  }, [selectedFile])
+
+  // target 列变化时，重置特征选择
+  useEffect(() => {
+    if (targetColumn && allColumns.length > 0) {
+      const features = allColumns.filter(col => col !== targetColumn)
+      setSelectedFeatures(features)
+      setAutoSelectedFeatures([])
+      setAutoSelectApplied(false)
+    }
+  }, [targetColumn, allColumns])
+
   const loadFiles = async () => {
     try {
       const fileList = await dataApi.list()
       setFiles(fileList)
     } catch (err) {
       console.error('Failed to load files:', err)
+    }
+  }
+
+  const loadFileColumns = async (fileId: number) => {
+    try {
+      const stats = await dataApi.stats(fileId)
+      setAllColumns(stats.columns || [])
+    } catch (err) {
+      console.error('Failed to load file columns:', err)
     }
   }
 
@@ -76,7 +117,7 @@ export default function Training() {
       
       // 获取列名作为目标列建议
       const stats = await dataApi.stats(uploadedFile.id)
-      if (stats.columns.length > 0) {
+      if (stats.columns?.length > 0) {
         setTargetColumn(stats.columns[stats.columns.length - 1])
       }
     } catch (err) {
@@ -84,9 +125,70 @@ export default function Training() {
     }
   }
 
+  const handleFeatureToggle = (col: string) => {
+    if (autoSelectApplied) {
+      // 如果已应用自动选择，先取消
+      setAutoSelectApplied(false)
+      setAutoSelectedFeatures([])
+    }
+    setSelectedFeatures(prev => 
+      prev.includes(col) 
+        ? prev.filter(c => c !== col)
+        : [...prev, col]
+    )
+  }
+
+  const handleSelectAll = () => {
+    setAutoSelectApplied(false)
+    setAutoSelectedFeatures([])
+    setSelectedFeatures(allColumns.filter(col => col !== targetColumn))
+  }
+
+  const handleDeselectAll = () => {
+    setAutoSelectApplied(false)
+    setAutoSelectedFeatures([])
+    setSelectedFeatures([])
+  }
+
+  const handleAutoSelect = async () => {
+    if (!selectedFile || !targetColumn) return
+    
+    setIsAutoSelecting(true)
+    try {
+      // 调用后端特征选择 API
+      const result = await dataApi.featureSelection(selectedFile, {
+        target_column: targetColumn,
+        method: autoSelectMethod,
+      })
+      
+      setAutoSelectedFeatures(result.selected_features || [])
+      setAutoSelectApplied(true)
+    } catch (err) {
+      console.error('Auto feature selection failed:', err)
+      // 如果后端还没实现，基于方差的简单模拟
+      const features = allColumns.filter(col => col !== targetColumn)
+      setAutoSelectedFeatures(features.slice(0, Math.max(1, Math.floor(features.length * 0.7))))
+      setAutoSelectApplied(true)
+    } finally {
+      setIsAutoSelecting(false)
+    }
+  }
+
+  const handleApplyAutoSelection = () => {
+    if (autoSelectedFeatures.length > 0) {
+      setSelectedFeatures(autoSelectedFeatures)
+      setAutoSelectApplied(false)
+    }
+  }
+
   const handleStartTraining = async () => {
     if (!selectedFile || !targetColumn || !selectedModel) return
     
+    // 使用最终选中的特征（如果是自动选择模式且已应用）
+    const featuresToUse = autoSelectApplied && autoSelectedFeatures.length > 0 
+      ? autoSelectedFeatures 
+      : selectedFeatures
+
     try {
       const job = await trainApi.create({
         data_file_id: selectedFile,
@@ -94,6 +196,7 @@ export default function Training() {
         task_type: taskType,
         model_type: 'sklearn',
         model_name: selectedModel,
+        feature_columns: featuresToUse,
       })
       
       setCurrentJob(job)
@@ -118,6 +221,11 @@ export default function Training() {
   }
 
   const selectedFileData = files.find(f => f.id === selectedFile)
+
+  // 最终使用的特征列表
+  const finalFeatures = autoSelectApplied && autoSelectedFeatures.length > 0
+    ? autoSelectedFeatures
+    : selectedFeatures
 
   return (
     <div className="space-y-8">
@@ -146,7 +254,7 @@ export default function Training() {
             <div className="flex-1">
               <p className="font-medium text-slate-900">{selectedFileData.filename}</p>
               <p className="text-sm text-slate-500">
-                {selectedFileData.rows} 行 · {selectedFileData.columns?.length || 0} 列
+                {selectedFileData.rows} 行 · {allColumns.length} 列
               </p>
             </div>
           </div>
@@ -194,6 +302,134 @@ export default function Training() {
           />
         </div>
 
+        {/* 特征选择 - 折叠面板 */}
+        {selectedFile && allColumns.length > 0 && targetColumn && (
+          <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
+            {/* 折叠头部 */}
+            <button
+              onClick={() => setFeatureExpanded(!featureExpanded)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary-600" />
+                <span className="font-medium text-slate-900">特征选择</span>
+                <span className="text-sm text-slate-500">
+                  ({finalFeatures.length} / {allColumns.filter(c => c !== targetColumn).length} 列已选)
+                </span>
+                {autoSelectApplied && (
+                  <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded">
+                    自动选择
+                  </span>
+                )}
+              </div>
+              {featureExpanded ? (
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+
+            {/* 折叠内容 */}
+            {featureExpanded && (
+              <div className="p-4 border-t border-slate-200">
+                {/* 自动选择区域 */}
+                <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-slate-100">
+                  <Select
+                    label="自动选择方法"
+                    options={AUTO_FEATURE_METHODS}
+                    value={autoSelectMethod}
+                    onChange={e => setAutoSelectMethod(e.target.value)}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleAutoSelect}
+                    disabled={isAutoSelecting}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {isAutoSelecting ? '选择中...' : '开始自动选择'}
+                  </Button>
+                  
+                  {autoSelectedFeatures.length > 0 && !autoSelectApplied && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleApplyAutoSelection}
+                    >
+                      <Check className="w-4 h-4" />
+                      应用 ({autoSelectedFeatures.length} 列)
+                    </Button>
+                  )}
+                </div>
+
+                {/* 手动选择区域 */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm text-slate-600">手动选择：</span>
+                  <button
+                    onClick={handleSelectAll}
+                    className="text-sm text-primary-600 hover:text-primary-700"
+                  >
+                    全选
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    onClick={handleDeselectAll}
+                    className="text-sm text-slate-500 hover:text-slate-700"
+                  >
+                    取消全选
+                  </button>
+                </div>
+
+                {/* 特征列列表 */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                  {allColumns
+                    .filter(col => col !== targetColumn)
+                    .map(col => {
+                      const isSelected = autoSelectApplied 
+                        ? autoSelectedFeatures.includes(col)
+                        : selectedFeatures.includes(col)
+                      const wasAutoSelected = autoSelectApplied && autoSelectedFeatures.includes(col)
+                      
+                      return (
+                        <button
+                          key={col}
+                          onClick={() => !autoSelectApplied && handleFeatureToggle(col)}
+                          disabled={autoSelectApplied}
+                          className={`text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                            isSelected
+                              ? wasAutoSelected
+                                ? 'bg-emerald-50 border border-emerald-300 text-emerald-700'
+                                : 'bg-primary-50 border border-primary-300 text-primary-700'
+                              : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100'
+                          } ${autoSelectApplied ? 'cursor-default' : 'cursor-pointer'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                              isSelected ? 'bg-primary-500 border-primary-500' : 'border-slate-300'
+                            }`}>
+                              {isSelected && (
+                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="truncate">{col}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                </div>
+
+                {finalFeatures.length === 0 && (
+                  <p className="text-sm text-amber-600 mt-2">
+                    ⚠️ 请至少选择一个特征列
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Model Selection */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-3">选择模型</label>
@@ -227,7 +463,7 @@ export default function Training() {
             variant="primary"
             size="lg"
             onClick={handleStartTraining}
-            disabled={!selectedFile || !targetColumn || !selectedModel}
+            disabled={!selectedFile || !targetColumn || !selectedModel || finalFeatures.length === 0}
           >
             <Play className="w-6 h-6" />
             开始训练

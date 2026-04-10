@@ -7,6 +7,7 @@ export interface TrainRequest {
   model_type: 'sklearn' | 'xgboost' | 'lightgbm' | 'pytorch'
   model_name: string
   params?: Record<string, any>
+  feature_columns?: string[]  // 手动选择的特征列
 }
 
 export interface TrainJob {

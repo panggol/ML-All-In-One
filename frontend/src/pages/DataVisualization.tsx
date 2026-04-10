@@ -1,8 +1,7 @@
-import { useState } from 'react'
-import { BarChart3, TrendingUp, Layers } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { BarChart3, TrendingUp, Layers, RefreshCw, AlertCircle } from 'lucide-react'
 import Card from '../components/Card'
 import Select from '../components/Select'
-import Input from '../components/Input'
 import Button from '../components/Button'
 import {
   HistogramChart,
@@ -12,133 +11,221 @@ import {
   type ScatterDatum,
   type FeatureImportanceDatum,
 } from '../components/Charts'
+import { dataApi, experimentApi, vizApi } from '../api'
+import type { DataFile, Experiment } from '../api'
 
-// ─── Mock Data ───────────────────────────────────────────────────────────────
+// ─── 工具函数 ────────────────────────────────────────────────────────────────
 
-const generateHistogramData = (_feature: string): HistogramDatum[] => {
-  const ranges = ['0-10', '10-20', '20-30', '30-40', '40-50', '50-60', '60-70', '70-80', '80-90', '90-100']
-  const counts = Array.from({ length: 10 }, () => Math.floor(Math.random() * 200 + 20))
-  return ranges.map((range, i) => ({ range, count: counts[i], density: counts[i] / 1000 }))
+function toHistogramData(stats: any): HistogramDatum[] {
+  const h = stats.histogram
+  if (!h) return []
+  return h.midpoints.map((_mid: number, i: number) => ({
+    range: `${h.bins[i].toFixed(1)}-${h.bins[i + 1].toFixed(1)}`,
+    count: h.counts[i],
+    density: h.counts[i] / (h.bins[i + 1] - h.bins[i]) / (h.counts.reduce((s: number, c: number) => s + c, 0) || 1),
+  }))
 }
 
-const generateScatterData = (n = 80): ScatterDatum[] =>
-  Array.from({ length: n }, (_, i) => ({
-    x: Math.random() * 100,
-    y: Math.random() * 100 + (i % 3 === 0 ? 10 : 0),
-    name: `点-${i + 1}`,
-    size: Math.floor(Math.random() * 30 + 10),
+function toScatterData(actual: number[], predicted: number[]): ScatterDatum[] {
+  return actual.map((a, i) => ({
+    x: a,
+    y: predicted[i],
+    name: `样本-${i + 1}`,
+    size: 20,
   }))
+}
 
-const FEATURE_NAMES = [
-  'sepal_length', 'sepal_width', 'petal_length', 'petal_width',
-  'age', 'income', 'score', 'duration', 'balance', 'campaign',
-]
-
-const generateFeatureImportance = (): FeatureImportanceDatum[] =>
-  FEATURE_NAMES.map((feature, i) => ({
-    feature,
-    importance: parseFloat((Math.random() * (0.9 - i * 0.08) + 0.05).toFixed(4)),
+function toFeatureImportanceData(items: any[]): FeatureImportanceDatum[] {
+  return items.map((item) => ({
+    feature: item.feature,
+    importance: Number(item.importance),
     color: undefined,
-  })).sort((a, b) => b.importance - a.importance)
-
-// ─── Options ──────────────────────────────────────────────────────────────────
-
-const FEATURE_OPTIONS = FEATURE_NAMES.map((f) => ({ value: f, label: f }))
-
-const DATASET_OPTIONS = [
-  { value: 'iris', label: 'Iris 数据集' },
-  { value: 'wine', label: 'Wine 数据集' },
-  { value: 'boston', label: 'Boston Housing' },
-  { value: 'custom', label: '自定义上传' },
-]
-
-const SCATTER_X_OPTIONS = FEATURE_NAMES.map((f) => ({ value: f, label: f }))
-const SCATTER_Y_OPTIONS = FEATURE_NAMES.map((f) => ({ value: f, label: f }))
+  }))
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DataVisualization() {
-  const [dataset, setDataset] = useState('iris')
-  const [histogramFeature, setHistogramFeature] = useState('sepal_length')
-  const [scatterX, setScatterX] = useState('sepal_length')
-  const [scatterY, setScatterY] = useState('sepal_width')
-  const [topN, setTopN] = useState<string>('10')
+  const [dataFiles, setDataFiles] = useState<DataFile[]>([])
+  const [experiments, setExperiments] = useState<Experiment[]>([])
+  const [selectedDataFile, setSelectedDataFile] = useState<number | null>(null)
+  const [selectedExp, setSelectedExp] = useState<number | null>(null)
+  const [plotType, setPlotType] = useState<'histogram' | 'boxplot'>('histogram')
+  const [selectedFeature, setSelectedFeature] = useState<string>('')
 
-  const [loadingHistogram, setLoadingHistogram] = useState(false)
+  const [loadingDist, setLoadingDist] = useState(false)
   const [loadingScatter, setLoadingScatter] = useState(false)
   const [loadingImportance, setLoadingImportance] = useState(false)
+  const [distError, setDistError] = useState<string>('')
+  const [impError, setImpError] = useState<string>('')
 
-  const [histogramData, setHistogramData] = useState<HistogramDatum[]>([])
+  const [distData, setDistData] = useState<HistogramDatum[]>([])
   const [scatterData, setScatterData] = useState<ScatterDatum[]>([])
   const [importanceData, setImportanceData] = useState<FeatureImportanceDatum[]>([])
-
-  const [histogramLoaded, setHistogramLoaded] = useState(false)
+  const [distLoaded, setDistLoaded] = useState(false)
   const [scatterLoaded, setScatterLoaded] = useState(false)
   const [importanceLoaded, setImportanceLoaded] = useState(false)
 
-  const simulateLoad = (setLoading: (v: boolean) => void, setData: (v: any[]) => void, setLoaded: (v: boolean) => void, genFn: () => any[]) => {
-    setLoading(true)
-    setLoaded(false)
-    setTimeout(() => {
-      setData(genFn())
-      setLoading(false)
-      setLoaded(true)
-    }, 800)
-  }
+  const [summary, setSummary] = useState<{ rows: number; columns: number; numeric_features: number } | null>(null)
 
-  const handleRefreshHistogram = () =>
-    simulateLoad(setLoadingHistogram, setHistogramData, setHistogramLoaded, () =>
-      generateHistogramData(histogramFeature)
-    )
+  // 加载数据文件列表
+  useEffect(() => {
+    dataApi.list().then((files) => {
+      setDataFiles(files)
+      if (files.length > 0) setSelectedDataFile(files[0].id)
+    }).catch(() => {})
+    experimentApi.list().then((exps) => {
+      setExperiments(exps)
+      if (exps.length > 0) setSelectedExp(exps[0].id)
+    }).catch(() => {})
+  }, [])
 
-  const handleRefreshScatter = () =>
-    simulateLoad(setLoadingScatter, setScatterData, setScatterLoaded, generateScatterData)
+  // 加载数据分布
+  const loadDistributions = useCallback(async () => {
+    if (!selectedDataFile) return
+    setLoadingDist(true)
+    setDistError('')
+    setDistLoaded(false)
+    try {
+      const data = await vizApi.getDistributions(selectedDataFile, { plot_type: plotType })
+      // 取第一个数值特征的直方图数据
+      const numericPlot = data.plots.find((p) => p.dtype !== 'object' && p.stats.histogram)
+      if (numericPlot?.stats.histogram) {
+        setDistData(toHistogramData(numericPlot.stats))
+        setSelectedFeature(numericPlot.feature)
+      } else if (data.plots.length > 0) {
+        setSelectedFeature(data.plots[0].feature)
+        setDistData(toHistogramData(data.plots[0].stats))
+      }
+      setSummary({ rows: data.dataset_info.rows, columns: data.dataset_info.columns, numeric_features: data.plots.filter(p => p.dtype !== 'object').length })
+      setDistLoaded(true)
+    } catch (e: any) {
+      setDistError(e?.response?.data?.detail || '加载失败')
+    } finally {
+      setLoadingDist(false)
+    }
+  }, [selectedDataFile, plotType])
 
-  const handleRefreshImportance = () =>
-    simulateLoad(setLoadingImportance, setImportanceData, setImportanceLoaded, generateFeatureImportance)
-
-  // Auto-load on mount
-  const [initialized, setInitialized] = useState(false)
-  if (!initialized) {
-    setInitialized(true)
-    setTimeout(() => {
-      setHistogramData(generateHistogramData(histogramFeature))
-      setHistogramLoaded(true)
-      setScatterData(generateScatterData())
+  // 加载评估散点图（真实值 vs 预测值）
+  const loadScatter = useCallback(async () => {
+    if (!selectedExp) return
+    setLoadingScatter(true)
+    setScatterLoaded(false)
+    try {
+      const eval_ = await vizApi.getEvaluation(selectedExp)
+      const scatterPlot = eval_.plots.find((p) => p.type === 'true_vs_predicted')
+      const confusionPlot = eval_.plots.find((p) => p.type === 'confusion_matrix')
+      if (scatterPlot) {
+        const { actual, predicted } = scatterPlot.data
+        setScatterData(toScatterData(actual, predicted))
+      } else if (confusionPlot) {
+        // 二分类混淆矩阵转散点：1D数据用对角线示意
+        setScatterData([])
+      }
       setScatterLoaded(true)
-      setImportanceData(generateFeatureImportance())
+    } catch {
+      setScatterLoaded(true)
+    } finally {
+      setLoadingScatter(false)
+    }
+  }, [selectedExp])
+
+  // 加载特征重要性
+  const loadImportance = useCallback(async () => {
+    if (!selectedExp) return
+    setLoadingImportance(true)
+    setImpError('')
+    setImportanceLoaded(false)
+    try {
+      const data = await vizApi.getFeatureImportance(selectedExp)
+      if (data.importance.length > 0) {
+        setImportanceData(toFeatureImportanceData(data.importance))
+      } else {
+        setImportanceData([])
+      }
       setImportanceLoaded(true)
-    }, 300)
-  }
+    } catch (e: any) {
+      setImpError(e?.response?.data?.detail || '加载失败')
+      setImportanceLoaded(true)
+    } finally {
+      setLoadingImportance(false)
+    }
+  }, [selectedExp])
+
+  // 数据文件变化时自动加载
+  useEffect(() => {
+    if (selectedDataFile) loadDistributions()
+  }, [selectedDataFile, plotType])
+
+  // 实验变化时加载散点和重要性
+  useEffect(() => {
+    if (selectedExp) {
+      loadScatter()
+      loadImportance()
+    }
+  }, [selectedExp])
+
+  const dataFileOptions = dataFiles.map((f) => ({ value: String(f.id), label: f.filename }))
+  const expOptions = experiments.map((e) => ({ value: String(e.id), label: e.name }))
+
+  const currentFile = dataFiles.find((f) => f.id === selectedDataFile)
+  const featureOptions = currentFile?.columns.map((c) => ({ value: c, label: c })) || []
 
   return (
     <div className="space-y-8">
-      {/* Page Header */}
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">数据可视化</h1>
-        <p className="text-slate-500 mt-1">探索数据分布、变量关系与特征重要性</p>
+        <p className="text-slate-500 mt-1">探索数据分布、特征重要性与预测结果</p>
       </div>
 
       {/* Global Controls */}
       <Card>
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4 flex-wrap">
+          <div className="flex-1 min-w-48">
             <Select
               label="数据集"
-              options={DATASET_OPTIONS}
-              value={dataset}
-              onChange={(e) => setDataset(e.target.value)}
+              options={dataFileOptions}
+              value={String(selectedDataFile ?? '')}
+              onChange={(e) => setSelectedDataFile(Number(e.target.value))}
             />
           </div>
-          <div className="flex gap-3">
-            <Button variant="secondary" size="sm" onClick={handleRefreshHistogram}>
-              刷新全部
+          <div className="flex-1 min-w-48">
+            <Select
+              label="实验"
+              options={expOptions}
+              value={String(selectedExp ?? '')}
+              onChange={(e) => setSelectedExp(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex gap-2 items-end">
+            <Button variant="secondary" size="sm" onClick={loadDistributions} disabled={!selectedDataFile || loadingDist}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              刷新
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* Charts Row 1: Histogram + Scatter */}
+      {/* Summary Stats */}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <Card className="text-center py-4">
+            <p className="text-2xl font-semibold text-slate-900">{summary.rows.toLocaleString()}</p>
+            <p className="text-sm text-slate-500 mt-1">样本数</p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-semibold text-slate-900">{summary.columns}</p>
+            <p className="text-sm text-slate-500 mt-1">特征数</p>
+          </Card>
+          <Card className="text-center py-4">
+            <p className="text-2xl font-semibold text-slate-900">{summary.numeric_features}</p>
+            <p className="text-sm text-slate-500 mt-1">数值特征</p>
+          </Card>
+        </div>
+      )}
+
+      {/* Charts Row 1: Distribution + Scatter */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Histogram */}
         <Card>
@@ -149,70 +236,66 @@ export default function DataVisualization() {
             </div>
             <div className="flex items-center gap-2">
               <Select
-                options={FEATURE_OPTIONS}
-                value={histogramFeature}
-                onChange={(e) => setHistogramFeature(e.target.value)}
-                className="w-36"
+                label="类型"
+                options={[
+                  { value: 'histogram', label: '直方图' },
+                  { value: 'boxplot', label: '箱线图' },
+                ]}
+                value={plotType}
+                onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot')}
+                className="w-28"
               />
-              <Button variant="ghost" size="sm" onClick={handleRefreshHistogram}>
-                刷新
-              </Button>
+              <Select
+                label="特征"
+                options={featureOptions}
+                value={selectedFeature}
+                onChange={(e) => setSelectedFeature(e.target.value)}
+                className="w-40"
+              />
             </div>
           </div>
 
+          {distError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
+              <AlertCircle className="w-4 h-4" />
+              {distError}
+            </div>
+          )}
+
           <HistogramChart
-            data={histogramData}
-            loading={loadingHistogram || !histogramLoaded}
-            emptyText="请先加载数据"
+            data={distData}
+            loading={loadingDist || !distLoaded}
+            emptyText={selectedDataFile ? '暂无分布数据' : '请先选择数据集'}
             color="#6366f1"
             height={280}
           />
 
-          {histogramLoaded && histogramData.length > 0 && (
+          {distLoaded && distData.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-sm text-slate-500">
-                特征 <span className="font-medium text-slate-700">{histogramFeature}</span> 的分布
-                · 共 <span className="font-medium text-slate-700">{histogramData.reduce((s, d) => s + d.count, 0)}</span> 条记录
+                特征 <span className="font-medium text-slate-700">{selectedFeature}</span> 的分布
+                · 共 <span className="font-medium text-slate-700">{distData.reduce((s, d) => s + d.count, 0).toLocaleString()}</span> 条记录
               </p>
             </div>
           )}
         </Card>
 
-        {/* Scatter */}
+        {/* Scatter (Prediction) */}
         <Card>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-lg font-semibold text-slate-900">散点图</h2>
+              <h2 className="text-lg font-semibold text-slate-900">预测结果</h2>
             </div>
-            <div className="flex items-center gap-2">
-              <Select
-                label="X 轴"
-                options={SCATTER_X_OPTIONS}
-                value={scatterX}
-                onChange={(e) => setScatterX(e.target.value)}
-                className="w-36"
-              />
-              <span className="text-slate-400 mt-4">×</span>
-              <Select
-                label="Y 轴"
-                options={SCATTER_Y_OPTIONS}
-                value={scatterY}
-                onChange={(e) => setScatterY(e.target.value)}
-                className="w-36"
-              />
-              <Button variant="ghost" size="sm" onClick={handleRefreshScatter}>
-                刷新
-              </Button>
-            </div>
+            <span className="text-xs text-slate-400">{selectedExp ? `实验 #${selectedExp}` : '请选择实验'}</span>
           </div>
 
           <ScatterChartComponent
             data={scatterData}
             loading={loadingScatter || !scatterLoaded}
-            emptyText="请先加载数据"
-            xLabel={scatterX}
-            yLabel={scatterY}
+            emptyText={selectedExp ? '暂无预测数据' : '请先选择实验'}
+            xLabel="真实值"
+            yLabel="预测值"
             height={280}
             color="#10b981"
           />
@@ -220,7 +303,7 @@ export default function DataVisualization() {
           {scatterLoaded && scatterData.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-sm text-slate-500">
-                {scatterX} × {scatterY} · 共 <span className="font-medium text-slate-700">{scatterData.length}</span> 个数据点
+                真实值 vs 预测值 · 共 <span className="font-medium text-slate-700">{scatterData.length}</span> 个样本
               </p>
             </div>
           )}
@@ -234,35 +317,31 @@ export default function DataVisualization() {
             <Layers className="w-5 h-5 text-violet-600" />
             <h2 className="text-lg font-semibold text-slate-900">特征重要性</h2>
           </div>
-          <div className="flex items-center gap-2">
-            <Input
-              label="显示 Top N"
-              value={topN}
-              onChange={(e) => setTopN(e.target.value)}
-              className="w-20 text-center"
-              type="number"
-              min="1"
-              max="20"
-            />
-            <Button variant="ghost" size="sm" onClick={handleRefreshImportance}>
-              刷新
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={loadImportance} disabled={!selectedExp || loadingImportance}>
+            <RefreshCw className="w-4 h-4 mr-1" />
+            刷新
+          </Button>
         </div>
+
+        {impError && (
+          <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
+            <AlertCircle className="w-4 h-4" />
+            {impError}
+          </div>
+        )}
 
         <FeatureImportanceChart
           data={importanceData}
           loading={loadingImportance || !importanceLoaded}
-          emptyText="暂无特征重要性数据"
+          emptyText={selectedExp ? '该实验无特征重要性数据' : '请先选择实验'}
           color="#8b5cf6"
           height={320}
-          topN={parseInt(topN) || undefined}
         />
 
         {importanceLoaded && importanceData.length > 0 && (
           <div className="mt-4 pt-4 border-t border-slate-100">
             <p className="text-sm text-slate-500">
-              基于当前模型评估 · 共 <span className="font-medium text-slate-700">{importanceData.length}</span> 个特征
+              基于当前实验模型 · 共 <span className="font-medium text-slate-700">{importanceData.length}</span> 个特征
             </p>
           </div>
         )}

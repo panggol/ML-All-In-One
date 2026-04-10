@@ -481,7 +481,14 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
         return XGBoostModel(**kwargs)
 
     elif model_type == "lightgbm":
-        return LightGBMModel(**kwargs)
+        # 从 objective 推断任务类型，默认为分类器
+        objective = kwargs.get("objective", "")
+        regression_objectives = {
+            "regression", "regression_l1", "regression_l2", "mape",
+            "poisson", "tweedie", "gamma"
+        }
+        task = "regression" if objective in regression_objectives else "classification"
+        return LightGBMModel(task=task, **kwargs)
 
     elif model_type == "pytorch":
         import torch.nn as nn

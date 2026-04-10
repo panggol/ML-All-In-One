@@ -34,6 +34,7 @@ class TrainRequest(BaseModel):
     model_type: str  # sklearn/xgboost/lightgbm
     model_name: str
     params: Optional[dict] = {}
+    feature_columns: Optional[List[str]] = None  # 手动选择的特征列
 
 
 class TrainJobResponse(BaseModel):
@@ -149,6 +150,17 @@ def _run_training(job_id: int, db_url: str):
         df = pd.read_csv(data_file.filepath)
         if job.target_column not in df.columns:
             raise ValueError(f"目标列 '{job.target_column}' 不存在于数据中")
+
+        # 如果指定了 feature_columns，只保留目标列和指定的特征列
+        feature_columns = job.params.get('feature_columns') if job.params else None
+        if feature_columns:
+            # 验证指定的特征列都存在
+            missing_cols = [c for c in feature_columns if c not in df.columns]
+            if missing_cols:
+                raise ValueError(f"特征列不存在: {missing_cols}")
+            # 只保留目标列和指定的特征列
+            df = df[[c for c in feature_columns if c != job.target_column] + [job.target_column]]
+            training_mgr.update(job_id, logs=f"特征选择: 使用 {len(feature_columns)} 列\n")
 
         training_mgr.update(job_id, logs=f"数据加载完成: {len(df)} 行, {len(df.columns)} 列\n")
 
@@ -390,6 +402,11 @@ async def create_training(
             detail="数据文件不存在",
         )
 
+    # 将 feature_columns 存入 params
+    job_params = dict(request.params) if request.params else {}
+    if request.feature_columns:
+        job_params['feature_columns'] = request.feature_columns
+
     # 创建训练任务
     job = TrainingJob(
         user_id=current_user.id,
@@ -398,7 +415,7 @@ async def create_training(
         model_name=request.model_name,
         task_type=request.task_type,
         target_column=request.target_column,
-        params=request.params,
+        params=job_params,
         status="pending",
     )
     db.add(job)

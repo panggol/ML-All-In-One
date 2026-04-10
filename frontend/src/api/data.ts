@@ -42,4 +42,19 @@ export const dataApi = {
     const response = await api.get(`/data/${id}/stats`)
     return response.data
   },
+
+  featureSelection: async (id: number, params: {
+    target_column: string
+    method: string
+    threshold?: number
+  }): Promise<{
+    selected_features: string[]
+    all_features: string[]
+    method: string
+    removed_features: string[]
+    reason?: Record<string, any>
+  }> => {
+    const response = await api.post(`/data/${id}/feature-selection`, params)
+    return response.data
+  },
 }
