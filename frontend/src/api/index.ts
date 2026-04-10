@@ -14,3 +14,8 @@ export type {
   FeatureImportanceItem, FeatureImportanceResponse,
   EvaluationResponse, TrainingCurve, TrainingCurvesResponse
 } from './viz'
+export { automlApi } from './automl'
+export type {
+  AutoMLRequest, AutoMLStatus, AutoMLReport, SearchSpaceItem, TopModel
+} from './automl'
+

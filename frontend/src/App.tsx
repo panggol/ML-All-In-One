@@ -4,14 +4,16 @@ import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Training from './pages/Training'
 import Experiments from './pages/Experiments'
+import AutoML from './pages/AutoML'
 import AuthPage from './pages/AuthPage'
 
-type Tab = 'dashboard' | 'training' | 'experiments'
+type Tab = 'dashboard' | 'training' | 'experiments' | 'automl'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
   { id: 'training' as const, label: '模型训练', icon: Database },
   { id: 'experiments' as const, label: '实验记录', icon: LineChart },
+  { id: 'automl' as const, label: 'AutoML', icon: Sparkles },
 ]
 
 // 私有路由包装
@@ -35,6 +37,7 @@ function Layout() {
     const path = location.pathname
     if (path.includes('/training')) setActiveTab('training')
     else if (path.includes('/experiments')) setActiveTab('experiments')
+    else if (path.includes('/automl')) setActiveTab('automl')
     else setActiveTab('dashboard')
   }, [location.pathname])
 
@@ -119,6 +122,7 @@ function Layout() {
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'training' && <Training />}
         {activeTab === 'experiments' && <Experiments />}
+        {activeTab === 'automl' && <AutoML />}
       </main>
     </div>
   )
@@ -134,6 +138,7 @@ function App() {
           <Route path="/dashboard" element={<Layout />} />
           <Route path="/training" element={<Layout />} />
           <Route path="/experiments" element={<Layout />} />
+          <Route path="/automl" element={<Layout />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
