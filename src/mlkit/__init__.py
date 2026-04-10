@@ -6,6 +6,7 @@ mlkit - ML All In One
 
 from mlkit.config import Config, load_config
 from mlkit.hooks import Hook, PerformanceMonitorHook
+from mlkit.automl import AutoMLEngine, SearchSpace, AutoMLResult, TrialResult
 from mlkit.model import BaseModel, SKLearnModel, create_model
 from mlkit.registry import (
     DATASET_REGISTRY,
@@ -55,6 +56,11 @@ __all__ = [
     # Hooks
     "Hook",
     "PerformanceMonitorHook",
+    # AutoML
+    "AutoMLEngine",
+    "SearchSpace",
+    "AutoMLResult",
+    "TrialResult",
     # Runner
     "Runner",
     "create_runner",
