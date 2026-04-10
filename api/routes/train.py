@@ -9,7 +9,7 @@ import joblib
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
 # 添加 src 到路径以便导入 mlkit
@@ -49,8 +49,7 @@ class TrainJobResponse(BaseModel):
     logs: str = ""
     created_at: str = ""
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PredictRequest(BaseModel):

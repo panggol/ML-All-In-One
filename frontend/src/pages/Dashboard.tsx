@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Activity, TrendingUp, Clock, Award, Upload, Brain, LineChart } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import Card from '../components/Card'
 import StatCard from '../components/StatCard'
 import { trainApi, experimentApi } from '../api'
+import { monitorApi, type MonitorOverviewResponse } from '../api/monitor'
 
 interface ModelRecord {
   name: string
@@ -21,6 +23,15 @@ export default function Dashboard() {
     activeExperiments: 0,
     runtime: '0h',
     bestAccuracy: '0%'
+  })
+
+  // 监控数据（30 秒自动刷新）
+  const { data: monitorData, isLoading: monitorLoading } = useQuery({
+    queryKey: ['monitor', 'overview'],
+    queryFn: () => monitorApi.getOverview(),
+    select: (res) => res.data as MonitorOverviewResponse,
+    refetchInterval: 30000,
+    retry: 1,
   })
 
   const quickActions = [
@@ -161,24 +172,80 @@ export default function Dashboard() {
 
       {/* System Status */}
       <Card>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <h2 className="text-lg font-semibold text-slate-900">系统状态</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <h2 className="text-lg font-semibold text-slate-900">系统状态</h2>
+          </div>
+          <button
+            onClick={() => navigate('/monitor')}
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+          >
+            详情 →
+          </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-            <span className="text-sm text-slate-600">API 服务</span>
-            <span className="text-sm font-medium text-emerald-600">正常运行</span>
+        {monitorLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-14 bg-slate-100 rounded-lg animate-pulse" />
+            ))}
           </div>
-          <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-            <span className="text-sm text-slate-600">GPU 内存</span>
-            <span className="text-sm font-medium text-slate-700">2.1 GB / 8 GB</span>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* API 服务状态 */}
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <span className="text-sm text-slate-600">API 服务</span>
+              <span className="text-sm font-medium text-emerald-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                正常运行
+              </span>
+            </div>
+            {/* GPU 内存 */}
+            <div className="flex flex-col justify-center p-3 bg-slate-50 rounded-lg gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">GPU 内存</span>
+                <span className="text-sm font-medium text-slate-700">
+                  {monitorData?.gpu.available && monitorData.gpu.devices.length > 0
+                    ? `${monitorData.gpu.devices[0].memory_used_gb.toFixed(1)} / ${monitorData.gpu.devices[0].memory_total_gb.toFixed(1)} GB`
+                    : 'N/A'}
+                </span>
+              </div>
+              {monitorData?.gpu.available && monitorData.gpu.devices.length > 0 && (
+                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      monitorData.gpu.devices[0].memory_usage_percent >= 85 ? 'bg-red-500' :
+                      monitorData.gpu.devices[0].memory_usage_percent >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${monitorData.gpu.devices[0].memory_usage_percent}%` }}
+                  />
+                </div>
+              )}
+            </div>
+            {/* 磁盘使用 */}
+            <div className="flex flex-col justify-center p-3 bg-slate-50 rounded-lg gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">磁盘使用</span>
+                <span className="text-sm font-medium text-slate-700">
+                  {monitorData?.disk.partitions?.[0]
+                    ? `${monitorData.disk.partitions[0].used_gb.toFixed(1)} / ${monitorData.disk.partitions[0].total_gb.toFixed(1)} GB`
+                    : 'N/A'}
+                </span>
+              </div>
+              {monitorData?.disk.partitions?.[0] && (
+                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      monitorData.disk.partitions[0].usage_percent >= 85 ? 'bg-red-500' :
+                      monitorData.disk.partitions[0].usage_percent >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${monitorData.disk.partitions[0].usage_percent}%` }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-            <span className="text-sm text-slate-600">磁盘使用</span>
-            <span className="text-sm font-medium text-slate-700">12.4 GB / 100 GB</span>
-          </div>
-        </div>
+        )}
       </Card>
     </div>
   )

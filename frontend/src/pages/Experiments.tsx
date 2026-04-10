@@ -496,7 +496,9 @@ export default function Experiments() {
     setSelectedIds([])
   }
 
-  const selectedExperiments = experiments.filter(e => selectedIds.includes(String(e.id)))
+  const selectedExperiments = experiments
+    .filter(e => selectedIds.includes(String(e.id)))
+    .sort((a, b) => (b.metrics?.accuracy ?? 0) - (a.metrics?.accuracy ?? 0))
   const showCompareBar = viewMode === 'list' && selectedIds.length > 0
 
   return (

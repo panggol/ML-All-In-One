@@ -249,8 +249,21 @@ export default function Training() {
 
   const TrainingCurves = ({ metrics_curve }: { metrics_curve: MetricsCurve }) => {
     const [activeMetric, setActiveMetric] = useState<'loss' | 'accuracy'>('loss')
+    const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set())
 
     const chartData = useMemo(() => buildChartData(metrics_curve, activeMetric), [metrics_curve, activeMetric])
+
+    const toggleSeries = (key: string) => {
+      setHiddenSeries(prev => {
+        const next = new Set(prev)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        return next
+      })
+    }
 
     if (!RechartsComps) return null
 
@@ -313,26 +326,29 @@ export default function Training() {
             <Legend
               wrapperStyle={{ fontSize: 13, color: '#64748b', paddingTop: 8 }}
               iconType="plainline"
+              onClick={(e: any) => toggleSeries(e.dataKey)}
             />
             <Line
               type="monotone"
               dataKey="train"
               name={`Train ${metricLabel}`}
-              stroke="#6366F1"
+              stroke={hiddenSeries.has('train') ? '#cbd5e1' : '#6366F1'}
               strokeWidth={2}
               dot={{ r: 3 }}
               connectNulls={true}
               isAnimationActive={true}
+              hide={hiddenSeries.has('train')}
             />
             <Line
               type="monotone"
               dataKey="val"
               name={`Val ${metricLabel}`}
-              stroke="#F59E0B"
+              stroke={hiddenSeries.has('val') ? '#cbd5e1' : '#F59E0B'}
               strokeWidth={2}
               dot={{ r: 3 }}
               connectNulls={true}
               isAnimationActive={true}
+              hide={hiddenSeries.has('val')}
             />
           </LineChart>
         </ResponsiveContainer>

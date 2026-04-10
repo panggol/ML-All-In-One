@@ -1,3 +1,6 @@
+psutil>=5.9.0
+pynvml>=11.5.0
+
 # ML All In One API Dependencies
 
 fastapi==0.111.0

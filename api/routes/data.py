@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 
 from api.database import DataFile, User, get_db
@@ -29,8 +29,7 @@ class DataFileResponse(BaseModel):
     columns: List[str]
     created_at: str
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DataStats(BaseModel):
