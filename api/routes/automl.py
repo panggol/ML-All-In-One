@@ -308,7 +308,7 @@ async def start_automl(
 
     # 创建 job
     job_id = job_mgr.create()
-    job_mgr.update(job_id, n_trials=request.n_trials, strategy=request.strategy)
+    job_mgr.update(job_id, user_id=current_user.id, n_trials=request.n_trials, strategy=request.strategy)
 
     # 启动后台搜索
     background_tasks.add_task(
