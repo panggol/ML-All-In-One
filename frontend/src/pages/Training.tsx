@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Upload, Play, Pause, FileSpreadsheet, ChevronDown, ChevronRight, Sparkles, Check } from 'lucide-react'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Select from '../components/Select'
 import Input from '../components/Input'
 import ProgressBar from '../components/ProgressBar'
-import { dataApi, trainApi, TrainJob } from '../api'
+import { dataApi, trainApi, TrainJob, TrainStatus, MetricsCurve } from '../api'
 
 const MODEL_OPTIONS = [
   { value: 'RandomForestClassifier', label: 'RandomForest' },
@@ -34,6 +34,8 @@ export default function Training() {
   const [isTraining, setIsTraining] = useState(false)
   const [currentJob, setCurrentJob] = useState<TrainJob | null>(null)
   const [progress, setProgress] = useState(0)
+  const [metricsCurve, setMetricsCurve] = useState<MetricsCurve | null>(null)
+  const [curveExpanded, setCurveExpanded] = useState(false)
 
   // 特征选择相关状态
   const [featureExpanded, setFeatureExpanded] = useState(false)
@@ -54,10 +56,14 @@ export default function Training() {
     
     const interval = setInterval(async () => {
       try {
-        const status = await trainApi.getStatus(currentJob.id)
+        const status: TrainStatus = await trainApi.getStatus(currentJob.id)
         setProgress(status.progress)
-        
+
         if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped') {
+          if (status.status === 'completed' && status.metrics_curve) {
+            setMetricsCurve(status.metrics_curve)
+            setCurveExpanded(true)
+          }
           setIsTraining(false)
           setCurrentJob(null)
           setProgress(0)
@@ -226,6 +232,162 @@ export default function Training() {
   const finalFeatures = autoSelectApplied && autoSelectedFeatures.length > 0
     ? autoSelectedFeatures
     : selectedFeatures
+
+  // Recharts 动态导入
+  const [RechartsComps, setRechartsComps] = useState<any>(null)
+  useEffect(() => {
+    import('recharts').then(mod => setRechartsComps(mod))
+  }, [])
+
+  const buildChartData = (metrics_curve: MetricsCurve, metric: 'loss' | 'accuracy') => {
+    return metrics_curve.epochs.map((epoch, i) => ({
+      epoch,
+      train: metrics_curve[`train_${metric}`][i],
+      val: metrics_curve[`val_${metric}`][i],
+    }))
+  }
+
+  const TrainingCurves = ({ metrics_curve }: { metrics_curve: MetricsCurve }) => {
+    const [activeMetric, setActiveMetric] = useState<'loss' | 'accuracy'>('loss')
+
+    const chartData = useMemo(() => buildChartData(metrics_curve, activeMetric), [metrics_curve, activeMetric])
+
+    if (!RechartsComps) return null
+
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = RechartsComps
+
+    const metricLabel = activeMetric === 'loss' ? 'Loss' : 'Accuracy'
+    const formatter = (v: any) => typeof v === 'number' ? v.toFixed(4) : v
+
+    return (
+      <div className="mt-4">
+        {/* Tab 切换 */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setActiveMetric('loss')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeMetric === 'loss'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Loss
+          </button>
+          <button
+            onClick={() => setActiveMetric('accuracy')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeMetric === 'accuracy'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Accuracy
+          </button>
+        </div>
+
+        {/* 图表 */}
+        <ResponsiveContainer width="100%" height={256}>
+          <LineChart data={chartData} margin={{ top: 4, right: 24, left: -12, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal stroke="#e2e8f0" vertical={false} />
+            <XAxis
+              dataKey="epoch"
+              tick={{ fontSize: 12, fill: '#64748b' }}
+              axisLine={{ stroke: '#e2e8f0' }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fontSize: 12, fill: '#64748b' }}
+              axisLine={{ stroke: '#e2e8f0' }}
+              tickLine={false}
+            />
+            <Tooltip
+              formatter={formatter}
+              contentStyle={{
+                backgroundColor: 'white',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}
+              labelStyle={{ color: '#334155', fontWeight: 500 }}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 13, color: '#64748b', paddingTop: 8 }}
+              iconType="plainline"
+            />
+            <Line
+              type="monotone"
+              dataKey="train"
+              name={`Train ${metricLabel}`}
+              stroke="#6366F1"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              connectNulls={true}
+              isAnimationActive={true}
+            />
+            <Line
+              type="monotone"
+              dataKey="val"
+              name={`Val ${metricLabel}`}
+              stroke="#F59E0B"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              connectNulls={true}
+              isAnimationActive={true}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  const TrainingCurveCard = () => {
+    const status = currentJob?.status ?? (isTraining ? 'running' : null)
+
+    if (status === null) return null
+
+    return (
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-slate-700">📈 训练曲线</h3>
+          <button
+            onClick={() => setCurveExpanded(!curveExpanded)}
+            className="p-1 rounded hover:bg-slate-100 transition-colors"
+            title={curveExpanded ? '收起' : '展开'}
+          >
+            {curveExpanded ? (
+              <ChevronDown className="w-5 h-5 text-slate-400" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-slate-400" />
+            )}
+          </button>
+        </div>
+
+        {/* 训练中 */}
+        {(status === 'running') && !curveExpanded && (
+          <div className="text-center text-slate-400 py-8 bg-slate-50 rounded-lg">
+            训练中，曲线将在完成后展示
+          </div>
+        )}
+
+        {/* 训练失败 */}
+        {status === 'failed' && (
+          <div className="text-center text-slate-400 py-8 bg-slate-50 rounded-lg">
+            训练失败，无曲线数据
+          </div>
+        )}
+
+        {/* 已完成 - 展示曲线 */}
+        {status === 'running' && curveExpanded && metricsCurve && (
+          <TrainingCurves metrics_curve={metricsCurve} />
+        )}
+
+        {/* 训练刚完成且有曲线数据 */}
+        {status === 'completed' && metricsCurve && (
+          <TrainingCurves metrics_curve={metricsCurve} />
+        )}
+      </Card>
+    )
+  }
 
   return (
     <div className="space-y-8">
@@ -472,30 +634,37 @@ export default function Training() {
       </div>
 
       {/* Training Progress */}
-      {isTraining && currentJob && (
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">训练进度</h2>
-          <div className="space-y-6">
-            <ProgressBar value={progress} />
-            
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
-              <div className="text-center">
-                <p className="text-2xl font-semibold text-slate-900">{currentJob.model_name}</p>
-                <p className="text-sm text-slate-500">模型</p>
+      {(isTraining || currentJob || metricsCurve) && (
+        <>
+          {isTraining && currentJob && (
+            <Card>
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">训练进度</h2>
+              <div className="space-y-6">
+                <ProgressBar value={progress} />
+                
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
+                  <div className="text-center">
+                    <p className="text-2xl font-semibold text-slate-900">{currentJob.model_name}</p>
+                    <p className="text-sm text-slate-500">模型</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-semibold text-primary-600">
+                      {currentJob.metrics?.accuracy ? `${(currentJob.metrics.accuracy * 100).toFixed(1)}%` : '—'}
+                    </p>
+                    <p className="text-sm text-slate-500">准确率</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-semibold text-slate-900">{progress}%</p>
+                    <p className="text-sm text-slate-500">进度</p>
+                  </div>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-semibold text-primary-600">
-                  {currentJob.metrics?.accuracy ? `${(currentJob.metrics.accuracy * 100).toFixed(1)}%` : '—'}
-                </p>
-                <p className="text-sm text-slate-500">准确率</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-semibold text-slate-900">{progress}%</p>
-                <p className="text-sm text-slate-500">进度</p>
-              </div>
-            </div>
-          </div>
-        </Card>
+            </Card>
+          )}
+
+          {/* Training Curve Card */}
+          <TrainingCurveCard />
+        </>
       )}
     </div>
   )

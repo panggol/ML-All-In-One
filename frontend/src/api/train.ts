@@ -24,6 +24,14 @@ export interface TrainJob {
   finished_at?: string
 }
 
+export interface MetricsCurve {
+  epochs: number[]
+  train_loss: number[]
+  val_loss: number[]
+  train_accuracy: number[]
+  val_accuracy: number[]
+}
+
 export interface TrainStatus {
   id: number
   status: string
@@ -32,6 +40,7 @@ export interface TrainStatus {
   accuracy: number
   loss: number
   logs: string
+  metrics_curve?: MetricsCurve
 }
 
 export const trainApi = {

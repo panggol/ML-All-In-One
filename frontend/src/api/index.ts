@@ -7,7 +7,7 @@ export { vizApi } from './viz'
 
 export type { LoginRequest, RegisterRequest, AuthResponse, User } from './auth'
 export type { DataFile } from './data'
-export type { TrainRequest, TrainJob, TrainStatus } from './train'
+export type { TrainRequest, TrainJob, TrainStatus, MetricsCurve } from './train'
 export type { Experiment, MetricsHistory } from './experiments'
 export type {
   DistributionStats, FeatureDistribution, DataDistributionsResponse, DataSummary,
