@@ -1,18 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles, Database, LineChart, LogOut, User } from 'lucide-react'
+import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Training from './pages/Training'
 import Experiments from './pages/Experiments'
 import AutoML from './pages/AutoML'
+import Preprocessing from './pages/Preprocessing'
+import Inference from './pages/Inference'
+import DataManagement from './pages/DataManagement'
 import AuthPage from './pages/AuthPage'
 
-type Tab = 'dashboard' | 'training' | 'experiments' | 'automl'
+type Tab = 'dashboard' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
+  { id: 'data' as const, label: '数据管理', icon: FolderOpen },
   { id: 'training' as const, label: '模型训练', icon: Database },
   { id: 'experiments' as const, label: '实验记录', icon: LineChart },
+  { id: 'preprocessing' as const, label: '预处理', icon: Wand },
+  { id: 'inference' as const, label: '推理', icon: Cpu },
   { id: 'automl' as const, label: 'AutoML', icon: Sparkles },
 ]
 
@@ -36,9 +42,12 @@ function Layout() {
   // Sync activeTab with URL on mount and URL change
   useEffect(() => {
     const path = location.pathname
-    if (path.includes('/training')) setActiveTab('training')
+    if (path.includes('/data')) setActiveTab('data')
+    else if (path.includes('/training')) setActiveTab('training')
     else if (path.includes('/experiments')) setActiveTab('experiments')
     else if (path.includes('/automl')) setActiveTab('automl')
+    else if (path.includes('/preprocessing')) setActiveTab('preprocessing')
+    else if (path.includes('/inference')) setActiveTab('inference')
     else setActiveTab('dashboard')
   }, [location.pathname])
 
@@ -121,8 +130,11 @@ function Layout() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'data' && <DataManagement />}
         {activeTab === 'training' && <Training />}
         {activeTab === 'experiments' && <Experiments />}
+        {activeTab === 'preprocessing' && <Preprocessing />}
+        {activeTab === 'inference' && <Inference />}
         {activeTab === 'automl' && <AutoML />}
       </main>
     </div>
@@ -136,9 +148,12 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<AuthPage />} />
         <Route element={<PrivateRoute />}>
+          <Route path="/data" element={<Layout />} />
           <Route path="/dashboard" element={<Layout />} />
           <Route path="/training" element={<Layout />} />
           <Route path="/experiments" element={<Layout />} />
+          <Route path="/preprocessing" element={<Layout />} />
+          <Route path="/inference" element={<Layout />} />
           <Route path="/automl" element={<Layout />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

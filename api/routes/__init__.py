@@ -1,6 +1,6 @@
 """
 API 路由汇总
 """
-from api.routes import auth, data, train, experiments, models, viz
+from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing
 
-__all__ = ["auth", "data", "train", "experiments", "models", "viz"]
+__all__ = ["auth", "data", "train", "experiments", "models", "viz", "automl", "preprocessing"]

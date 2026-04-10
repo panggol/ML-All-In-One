@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from api.database import engine, Base
-from api.routes import auth, data, train, experiments, models, viz, automl
+from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing
 
 
 class RelativeRedirectMiddleware(BaseHTTPMiddleware):
@@ -59,6 +59,7 @@ app.include_router(experiments.router, prefix="/api/experiments", tags=["实验"
 app.include_router(models.router, prefix="/api/models", tags=["模型"])
 app.include_router(viz.router, prefix="/api/viz", tags=["可视化"])
 app.include_router(automl.router, prefix="/api/automl", tags=["AutoML"])
+app.include_router(preprocessing.router, prefix="/api/preprocessing", tags=["预处理"])
 
 @app.get("/")
 async def root():

@@ -15,7 +15,14 @@ export type {
   EvaluationResponse, TrainingCurve, TrainingCurvesResponse
 } from './viz'
 export { automlApi } from './automl'
+export { preprocessingApi, DEFAULT_STEPS } from './preprocessing'
+export { modelsApi } from './models'
+export type { ModelInfo, InferenceResult } from './models'
 export type {
   AutoMLRequest, AutoMLStatus, AutoMLReport, SearchSpaceItem, TopModel
 } from './automl'
+export type {
+  ImputerConfig, ScalerConfig, FeatureSelectConfig, PreprocessingSteps,
+  ColumnStats, PreviewResponse, TransformResponse
+} from './preprocessing'
 

@@ -39,4 +39,17 @@ export const experimentApi = {
     const response = await api.post('/experiments/compare', { experiment_ids: ids })
     return response.data
   },
+
+  compareCurves: async (ids: number[]): Promise<{
+    experiments: Array<{
+      experiment_id: number
+      experiment_name: string
+      color: string
+      epochs: number[]
+      curves: Array<{ name: string; values: number[] }>
+    }>
+  }> => {
+    const response = await api.post('/experiments/compare-curves', { experiment_ids: ids })
+    return response.data
+  },
 }

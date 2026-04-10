@@ -41,6 +41,33 @@ class DataStats(BaseModel):
     numeric_summary: Optional[dict] = None
 
 
+# ============ 前端期望的响应格式 ============
+
+class TopValue(BaseModel):
+    value: str
+    count: int
+
+
+class ColumnStatsDetail(BaseModel):
+    """匹配前端 ColumnStats 接口"""
+    column: str
+    dtype: str
+    null_count: int
+    unique_count: Optional[int] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    mean: Optional[float] = None
+    std: Optional[float] = None
+    top_values: Optional[List[TopValue]] = None
+
+
+class DataStatsResponse(BaseModel):
+    """匹配前端 StatsResponse 接口"""
+    total_rows: int
+    total_columns: int
+    column_stats: List[ColumnStatsDetail]
+
+
 # ============ 路由 ============
 
 @router.post("/upload", response_model=DataFileResponse)
@@ -188,7 +215,10 @@ async def preview_file(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """预览文件（前50行）"""
+    """
+    预览文件（前50行）
+    返回格式匹配前端 PreviewResponse: { rows, columns, total_rows }
+    """
     data_file = db.query(DataFile).filter(
         DataFile.id == file_id,
         DataFile.user_id == current_user.id
@@ -202,9 +232,12 @@ async def preview_file(
     
     try:
         df = pd.read_csv(data_file.filepath, nrows=50)
+        # 转换为行列表（匹配前端 rows: unknown[][]）
+        rows = df.values.tolist()
         return {
             "columns": list(df.columns),
-            "data": df.to_dict(orient="records")
+            "rows": rows,
+            "total_rows": len(df),
         }
     except Exception as e:
         raise HTTPException(
@@ -213,13 +246,16 @@ async def preview_file(
         )
 
 
-@router.get("/{file_id}/stats", response_model=DataStats)
+@router.get("/{file_id}/stats", response_model=DataStatsResponse)
 async def get_stats(
     file_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """获取文件统计信息"""
+    """
+    获取文件统计信息
+    返回格式匹配前端 StatsResponse: { total_rows, total_columns, column_stats }
+    """
     data_file = db.query(DataFile).filter(
         DataFile.id == file_id,
         DataFile.user_id == current_user.id
@@ -234,22 +270,41 @@ async def get_stats(
     try:
         df = pd.read_csv(data_file.filepath)
         
-        # 缺失值统计
-        missing = df.isnull().sum().to_dict()
-        missing = {k: int(v) for k, v in missing.items()}
+        # 构建每列统计信息
+        column_stats = []
+        for col in df.columns:
+            col_dtype = str(df[col].dtype)
+            null_count = int(df[col].isnull().sum())
+            unique_count = int(df[col].nunique())
+            
+            stat: dict = {
+                "column": col,
+                "dtype": col_dtype,
+                "null_count": null_count,
+                "unique_count": unique_count,
+            }
+            
+            # 数值列：计算基本统计量
+            if pd.api.types.is_numeric_dtype(df[col]):
+                stat["min"] = float(df[col].min()) if not df[col].isnull().all() else None
+                stat["max"] = float(df[col].max()) if not df[col].isnull().all() else None
+                stat["mean"] = float(df[col].mean()) if not df[col].isnull().all() else None
+                stat["std"] = float(df[col].std()) if not df[col].isnull().all() else None
+            # 分类列：返回 Top 值
+            else:
+                value_counts = df[col].value_counts(dropna=False).head(5)
+                stat["top_values"] = [
+                    {"value": str(v), "count": int(c)}
+                    for v, c in value_counts.items()
+                    if pd.notna(v)
+                ]
+            
+            column_stats.append(stat)
         
-        # 数值列统计
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        numeric_summary = {}
-        if len(numeric_cols) > 0:
-            numeric_summary = df[numeric_cols].describe().to_dict()
-        
-        return DataStats(
-            rows=len(df),
-            columns=len(df.columns),
-            dtypes={col: str(dtype) for col, dtype in df.dtypes.items()},
-            missing_values=missing,
-            numeric_summary=numeric_summary
+        return DataStatsResponse(
+            total_rows=len(df),
+            total_columns=len(df.columns),
+            column_stats=column_stats,
         )
     except Exception as e:
         raise HTTPException(
