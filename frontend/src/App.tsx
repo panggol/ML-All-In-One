@@ -1,19 +1,34 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen } from 'lucide-react'
-import { useState, useEffect } from 'react'
-import Dashboard from './pages/Dashboard'
-import Training from './pages/Training'
-import Experiments from './pages/Experiments'
-import AutoML from './pages/AutoML'
-import Preprocessing from './pages/Preprocessing'
-import Inference from './pages/Inference'
-import DataManagement from './pages/DataManagement'
-import AuthPage from './pages/AuthPage'
+import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity } from 'lucide-react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+// 懒加载页面组件，减少主包体积
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Monitor = lazy(() => import('./pages/Monitor'))
+const Training = lazy(() => import('./pages/Training'))
+const Experiments = lazy(() => import('./pages/Experiments'))
+const AutoML = lazy(() => import('./pages/AutoML'))
+const Preprocessing = lazy(() => import('./pages/Preprocessing'))
+const Inference = lazy(() => import('./pages/Inference'))
+const DataManagement = lazy(() => import('./pages/DataManagement'))
+const AuthPage = lazy(() => import('./pages/AuthPage'))
 
-type Tab = 'dashboard' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data'
+// 懒加载页面的加载状态
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-slate-500 text-sm">加载中...</span>
+      </div>
+    </div>
+  )
+}
+
+type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
+  { id: 'monitor' as const, label: '系统监控', icon: Activity },
   { id: 'data' as const, label: '数据管理', icon: FolderOpen },
   { id: 'training' as const, label: '模型训练', icon: Database },
   { id: 'experiments' as const, label: '实验记录', icon: LineChart },
@@ -42,7 +57,8 @@ function Layout() {
   // Sync activeTab with URL on mount and URL change
   useEffect(() => {
     const path = location.pathname
-    if (path.includes('/data')) setActiveTab('data')
+    if (path.includes('/monitor')) setActiveTab('monitor')
+    else if (path.includes('/data')) setActiveTab('data')
     else if (path.includes('/training')) setActiveTab('training')
     else if (path.includes('/experiments')) setActiveTab('experiments')
     else if (path.includes('/automl')) setActiveTab('automl')
@@ -82,7 +98,7 @@ function Layout() {
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id)
-                  navigate('/' + tab.id)
+                  navigate('/' + (tab.id === 'dashboard' ? 'dashboard' : tab.id))
                 }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-150 ${
                   activeTab === tab.id
@@ -129,13 +145,16 @@ function Layout() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'data' && <DataManagement />}
-        {activeTab === 'training' && <Training />}
-        {activeTab === 'experiments' && <Experiments />}
-        {activeTab === 'preprocessing' && <Preprocessing />}
-        {activeTab === 'inference' && <Inference />}
-        {activeTab === 'automl' && <AutoML />}
+        <Suspense fallback={<PageLoader />}>
+          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'monitor' && <Monitor />}
+          {activeTab === 'data' && <DataManagement />}
+          {activeTab === 'training' && <Training />}
+          {activeTab === 'experiments' && <Experiments />}
+          {activeTab === 'preprocessing' && <Preprocessing />}
+          {activeTab === 'inference' && <Inference />}
+          {activeTab === 'automl' && <AutoML />}
+        </Suspense>
       </main>
     </div>
   )
@@ -144,20 +163,23 @@ function Layout() {
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/login" element={<AuthPage />} />
-        <Route element={<PrivateRoute />}>
-          <Route path="/data" element={<Layout />} />
-          <Route path="/dashboard" element={<Layout />} />
-          <Route path="/training" element={<Layout />} />
-          <Route path="/experiments" element={<Layout />} />
-          <Route path="/preprocessing" element={<Layout />} />
-          <Route path="/inference" element={<Layout />} />
-          <Route path="/automl" element={<Layout />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/login" element={<AuthPage />} />
+          <Route element={<PrivateRoute />}>
+            <Route path="/data" element={<Layout />} />
+            <Route path="/monitor" element={<Layout />} />
+            <Route path="/dashboard" element={<Layout />} />
+            <Route path="/training" element={<Layout />} />
+            <Route path="/experiments" element={<Layout />} />
+            <Route path="/preprocessing" element={<Layout />} />
+            <Route path="/inference" element={<Layout />} />
+            <Route path="/automl" element={<Layout />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
