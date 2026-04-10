@@ -159,23 +159,46 @@ def _run_training(job_id: int, db_url: str):
         if job.target_column not in df.columns:
             raise ValueError(f"目标列 '{job.target_column}' 不存在于数据中")
 
-        # 如果指定了 feature_columns，只保留目标列和指定的特征列
+        # ========== BUG-002 修复：过滤非数值列 ==========
+        # 保留目标列和数值列，过滤掉其他字符串列
+        target_col = job.target_column
+        numeric_df = df.select_dtypes(include=['number'])
+        # 确保目标列存在（如果目标列本身是数值类型，select_dtypes 已包含；
+        # 如果是字符串类型则需要手动加入）
+        if target_col not in numeric_df.columns and target_col in df.columns:
+            numeric_df[target_col] = df[target_col]
+        # 过滤后只剩目标列时提示用户
+        if len(numeric_df.columns) <= 1:
+            raise ValueError(
+                "过滤后无有效数值特征列，请先做预处理或选择其他目标列"
+            )
+
+        # 如果指定了 feature_columns，只保留目标列和指定的数值特征列
         feature_columns = job.params.get('feature_columns') if job.params else None
         if feature_columns:
-            # 验证指定的特征列都存在
-            missing_cols = [c for c in feature_columns if c not in df.columns]
+            # 验证指定的特征列都存在且为数值类型
+            missing_cols = [c for c in feature_columns if c not in numeric_df.columns]
             if missing_cols:
-                raise ValueError(f"特征列不存在: {missing_cols}")
-            # 只保留目标列和指定的特征列
-            df = df[[c for c in feature_columns if c != job.target_column] + [job.target_column]]
+                raise ValueError(f"特征列不可用（非数值或不存在）: {missing_cols}")
+            # 过滤后再取指定的特征列
+            df = numeric_df[[c for c in feature_columns if c != target_col and c in numeric_df.columns] + [target_col]]
             training_mgr.update(job_id, logs=f"特征选择: 使用 {len(feature_columns)} 列\n")
+        else:
+            df = numeric_df
+
+        # 将最终 df 写入临时 CSV（过滤非数值列后），供 DataLoader 使用
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+            df.to_csv(tmp.name, index=False)
+            data_file_filtered_path = tmp.name
+        # ============================================
 
         training_mgr.update(job_id, logs=f"数据加载完成: {len(df)} 行, {len(df.columns)} 列\n")
 
         # 2. 创建 runner 配置并构建环境
         config_dict = {
             "data": {
-                "train_path": data_file.filepath,
+                "train_path": data_file_filtered_path,
                 "target_column": job.target_column,
             },
             "model": {
@@ -204,8 +227,8 @@ def _run_training(job_id: int, db_url: str):
             "hooks": [],
         })()
 
-        # 构建数据集
-        loader = DataLoader(data_file.filepath)
+        # 构建数据集（使用过滤后的临时 CSV）
+        loader = DataLoader(data_file_filtered_path)
         dataset = loader.load(target_column=job.target_column)
         runner.train_dataset = dataset
 
@@ -447,6 +470,14 @@ def _run_training(job_id: int, db_url: str):
             job.finished_at = datetime.utcnow()
             db.commit()
     finally:
+        # 清理临时过滤后的 CSV 文件
+        try:
+            if 'data_file_filtered_path' in dir() or 'data_file_filtered_path' in locals():
+                import os as _os
+                if data_file_filtered_path and _os.path.exists(data_file_filtered_path):
+                    _os.unlink(data_file_filtered_path)
+        except Exception:
+            pass
         training_mgr.unregister(job_id)
         db.close()
 
