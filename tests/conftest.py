@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pandas as pd
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 # Set JWT secret for tests before any api imports
 os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_pytest_only_do_not_use_in_production"
@@ -16,6 +18,39 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Set a test database URL before importing api modules
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+
+
+@pytest.fixture(scope="module")
+def admin_seed_engine(tmp_path_factory):
+    """
+    Shared engine for admin_account_seed tests.
+    Patches api.database and api.auth SessionLocal once per test session.
+    This avoids conflicts when running test_admin_seed.py and
+    test_admin_seed_api.py in the same pytest invocation.
+    """
+    db_path = str(tmp_path_factory.mktemp("admin_seed_dbs") / "admin_seed.db")
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+
+    # Patch BEFORE any api modules that use SessionLocal are imported
+    import api.database
+    import api.auth
+    api.database.SessionLocal = sessionmaker(bind=engine)
+    api.auth.SessionLocal = sessionmaker(bind=engine)
+
+    # Create tables
+    from api.database import Base
+    Base.metadata.create_all(bind=engine)
+
+    yield engine
+
+    engine.dispose()
+
+
+@pytest.fixture
+def admin_seed_db(admin_seed_engine):
+    """Per-test session factory using the shared engine."""
+    Session = sessionmaker(bind=admin_seed_engine)
+    return Session
 
 
 @pytest.fixture

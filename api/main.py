@@ -9,7 +9,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from api.database import engine, Base
-from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing, monitor, logs
+from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing, monitor, logs, platform_logs
+from api.auth import get_or_create_admin_user
+import os
+from api.middleware.logging_middleware import PlatformLoggingMiddleware
+from api.services.log_aggregator import init_platform_loggers, cleanup_old_logs
+import asyncio
 
 
 class RelativeRedirectMiddleware(BaseHTTPMiddleware):
@@ -31,6 +36,10 @@ class RelativeRedirectMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    get_or_create_admin_user()
+    # 初始化平台 logger 并清理超期日志（启动时同步清理，不阻塞 API）
+    init_platform_loggers()
+    asyncio.create_task(cleanup_old_logs())
     yield
 
 
@@ -44,9 +53,16 @@ app = FastAPI(
 # Add middleware to fix trailing slash redirects
 app.add_middleware(RelativeRedirectMiddleware)
 
+# 注册平台日志中间件（拦截所有 /api/* 请求）
+app.add_middleware(PlatformLoggingMiddleware)
+
+# CORS 配置：从环境变量读取允许的 origins，支持逗号分隔多个地址
+_cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
+_allowed_origins = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +78,7 @@ app.include_router(automl.router, prefix="/api/automl", tags=["AutoML"])
 app.include_router(preprocessing.router, prefix="/api/preprocessing", tags=["预处理"])
 app.include_router(monitor.router, prefix="/api/monitor", tags=["系统监控"])
 app.include_router(logs.router, prefix="/api/logs", tags=["日志"])
+app.include_router(platform_logs.router, prefix="/api/platform-logs", tags=["平台日志"])
 
 @app.get("/")
 async def root():

@@ -4,9 +4,10 @@
  * 功能：日志列表、分页、筛选（experiment_id + 时间范围）、
  *       单行展开详情、实时 WebSocket 追加、删除日志文件
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { FileText, Search, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, LoaderCircle, RefreshCw } from 'lucide-react'
 import { logsApi, type LogEntry, type LogsFilter } from '../api/logs'
+import { platformLogsApi, type PlatformLogEntry, type PlatformLogsFilter } from '../api/platform_logs'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import { useQuery } from '@tanstack/react-query'
@@ -97,6 +98,7 @@ export default function Logs() {
   const [page, setPage] = useState(1)
   const [filter, setFilter] = useState<LogsFilter>({})
   const [filterDraft, setFilterDraft] = useState<LogsFilter>({})
+  const [activeTab, setActiveTab] = useState<'training' | 'platform'>('training')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detailEntries, setDetailEntries] = useState<object[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -201,6 +203,7 @@ export default function Logs() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
+      {activeTab === 'training' && (
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
@@ -219,6 +222,30 @@ export default function Logs() {
           刷新
         </button>
       </div>
+      )}
+
+      {/* Tab Navigation */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-lg w-fit mb-2">
+        <button
+          onClick={() => setActiveTab('training')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'training' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          训练日志
+        </button>
+        <button
+          onClick={() => setActiveTab('platform')}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'platform' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          平台日志
+        </button>
+      </div>
+
+      {activeTab === 'training' && (
+      <>
 
       {/* 实时推送预览 */}
       {recentMetrics.length > 0 && (
@@ -343,7 +370,7 @@ export default function Logs() {
               </thead>
               <tbody>
                 {entries.map((entry, idx) => (
-                  <>
+                  <Fragment key={entry.file_id}>
                     <tr
                       key={entry.file_id}
                       className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${idx === 0 && newHighlight.size > 0 ? 'bg-blue-50' : ''}`}
@@ -462,7 +489,7 @@ export default function Logs() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -563,6 +590,380 @@ export default function Logs() {
               </button>
             </div>
           </Card>
+        </div>
+      )}
+      </>
+      )}
+
+      {activeTab === 'platform' && <PlatformLogsTab />}
+    </div>
+  )
+}
+
+// ============ 平台日志 Tab ============
+function PlatformLogsTab() {
+  const [page, setPage] = useState(1)
+  const [filter, setFilter] = useState<PlatformLogsFilter>({})
+  const [filterDraft, setFilterDraft] = useState<PlatformLogsFilter>({})
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [debouncedKeyword, setDebouncedKeyword] = useState<string>('')
+
+  // 防抖关键词输入
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (filterDraft.keyword !== debouncedKeyword) {
+        setDebouncedKeyword(filterDraft.keyword ?? '')
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [filterDraft.keyword, debouncedKeyword])
+
+  const PAGE_SIZE = 100
+
+  const {
+    data,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['platform-logs', page, filter, debouncedKeyword],
+    queryFn: () => platformLogsApi.list({ ...filter, keyword: debouncedKeyword }, page, PAGE_SIZE),
+    placeholderData: (prev) => prev,
+  })
+
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  const handleSearch = () => {
+    setFilter({ ...filterDraft, keyword: debouncedKeyword })
+    setPage(1)
+  }
+
+  const handleClear = () => {
+    setFilterDraft({})
+    setFilter({})
+    setDebouncedKeyword('')
+    setPage(1)
+  }
+
+  const handleExpand = (requestId: string) => {
+    setExpandedId(prev => prev === requestId ? null : requestId)
+  }
+
+  const goPage = (p: number) => {
+    setPage(Math.max(1, Math.min(p, totalPages)))
+  }
+
+  const entries: PlatformLogEntry[] = data?.data ?? []
+
+  const levelBadgeClass = (level: string) => {
+    switch (level) {
+      case 'ERROR': return 'px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200'
+      case 'WARNING': return 'px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 bg-orange-100 text-orange-700 border border-orange-200'
+      case 'INFO': return 'px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 bg-blue-100 text-blue-700 border border-blue-200'
+      case 'DEBUG': return 'px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200'
+      default: return 'px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200'
+    }
+  }
+
+  const moduleBadgeClass = (module: string) => {
+    switch (module) {
+      case 'api': return 'px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700'
+      case 'auth': return 'px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700'
+      case 'preprocessing': return 'px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700'
+      case 'error': return 'px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700'
+      case 'system': return 'px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600'
+      default: return 'px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600'
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+            <FileText className="w-6 h-6" />
+            平台日志
+          </h1>
+          <p className="text-slate-500 mt-1">
+            查看平台 API、认证等系统操作日志
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          刷新
+        </button>
+      </div>
+
+      {/* Filter Bar */}
+      <Card>
+        <div className="flex flex-wrap gap-3 items-end">
+          {/* Module Filter */}
+          <div className="flex flex-col gap-1 min-w-[140px]">
+            <label className="text-xs font-medium text-slate-500">模块</label>
+            <select
+              value={filterDraft.module ?? ''}
+              onChange={e => setFilterDraft(f => ({ ...f, module: (e.target.value || undefined) as PlatformLogsFilter['module'] }))}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">全部</option>
+              <option value="api">API</option>
+              <option value="auth">Auth</option>
+              <option value="preprocessing">Preprocessing</option>
+              <option value="error">Error</option>
+              <option value="system">System</option>
+            </select>
+          </div>
+
+          {/* Level Filter */}
+          <div className="flex flex-col gap-1 min-w-[140px]">
+            <label className="text-xs font-medium text-slate-500">级别</label>
+            <select
+              value={filterDraft.level ?? ''}
+              onChange={e => setFilterDraft(f => ({ ...f, level: (e.target.value || undefined) as PlatformLogsFilter['level'] }))}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="">全部</option>
+              <option value="DEBUG">DEBUG</option>
+              <option value="INFO">INFO</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+          </div>
+
+          {/* Start Time */}
+          <div className="flex flex-col gap-1 min-w-[160px]">
+            <label className="text-xs font-medium text-slate-500">开始时间</label>
+            <input
+              type="datetime-local"
+              value={filterDraft.start_time ? filterDraft.start_time.slice(0, 16) : ''}
+              onChange={e =>
+                setFilterDraft(f => ({
+                  ...f,
+                  start_time: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                }))
+              }
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* End Time */}
+          <div className="flex flex-col gap-1 min-w-[160px]">
+            <label className="text-xs font-medium text-slate-500">结束时间</label>
+            <input
+              type="datetime-local"
+              value={filterDraft.end_time ? filterDraft.end_time.slice(0, 16) : ''}
+              onChange={e =>
+                setFilterDraft(f => ({
+                  ...f,
+                  end_time: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                }))
+              }
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Keyword */}
+          <div className="flex flex-col gap-1 min-w-[200px] flex-1">
+            <label className="text-xs font-medium text-slate-500">关键词</label>
+            <input
+              type="text"
+              placeholder="搜索关键词（支持子串匹配）"
+              value={filterDraft.keyword ?? ''}
+              onChange={e => setFilterDraft(f => ({ ...f, keyword: e.target.value || undefined }))}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pb-0.5">
+            <Button onClick={handleSearch} className="flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5" />
+              查询
+            </Button>
+            <button
+              onClick={handleClear}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              清除
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Stats Bar */}
+      <div className="flex items-center gap-4 text-sm text-slate-500">
+        <span>共 <strong className="text-slate-700">{total}</strong> 条日志</span>
+        <span className="text-slate-300">|</span>
+        <span>第 <strong className="text-slate-700">{page}</strong> / <strong>{totalPages}</strong> 页</span>
+      </div>
+
+      {/* Log Table */}
+      <Card>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <LoaderCircle className="w-6 h-6 animate-spin text-slate-400" />
+            <span className="ml-2 text-slate-500">加载中...</span>
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <FileText className="w-12 h-12 mb-3 opacity-40" />
+            <p className="text-base font-medium">暂无日志记录</p>
+            <p className="text-sm mt-1">平台日志将在 API 调用、认证等操作后自动显示</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left py-3 px-3 font-medium text-slate-500 w-8"></th>
+                  <th className="text-left py-3 px-3 font-medium text-slate-500">时间</th>
+                  <th className="text-left py-3 px-3 font-medium text-slate-500">级别</th>
+                  <th className="text-left py-3 px-3 font-medium text-slate-500">模块</th>
+                  <th className="text-left py-3 px-3 font-medium text-slate-500">用户ID</th>
+                  <th className="text-left py-3 px-3 font-medium text-slate-500">消息</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => {
+                  const isExpanded = expandedId === entry.request_id
+                  return (
+                    <Fragment key={entry.request_id}>
+                      <tr
+                        className="border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer"
+                        onClick={() => handleExpand(entry.request_id)}
+                      >
+                        <td className="py-3 px-3">
+                          <span className={`inline-block w-2 h-2 rounded-full transition-colors ${isExpanded ? 'bg-primary-500' : 'bg-slate-300'}`} />
+                        </td>
+                        <td className="py-3 px-3 font-mono text-xs text-slate-600 whitespace-nowrap">
+                          {formatTimestamp(entry.timestamp)}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={levelBadgeClass(entry.level)}>{entry.level}</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={moduleBadgeClass(entry.module)}>{entry.module}</span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-500 text-xs">
+                          {entry.user_id ?? <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="py-3 px-3 text-xs text-slate-600 max-w-xs truncate">
+                          {entry.message}
+                        </td>
+                      </tr>
+
+                      {/* Expanded Detail Row */}
+                      {isExpanded && (
+                        <tr key={`${entry.request_id}-detail`} className="bg-slate-50">
+                          <td colSpan={6} className="px-6 py-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-slate-500">详情</p>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setExpandedId(null)
+                                }}
+                                className="p-1 rounded hover:bg-slate-200 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5 text-slate-400" />
+                              </button>
+                            </div>
+                            <div className="space-y-2 font-mono text-xs">
+                              <div>
+                                <span className="text-slate-400">request_id: </span>
+                                <span className="text-slate-700">{entry.request_id}</span>
+                              </div>
+                              {entry.extra && Object.keys(entry.extra).length > 0 && (
+                                <div>
+                                  <span className="text-slate-400">extra: </span>
+                                  <pre className="bg-slate-100 rounded p-2 overflow-x-auto mt-1 text-xs">
+                                    {JSON.stringify(entry.extra, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => goPage(1)}
+            disabled={page === 1}
+            className="p-1.5 rounded-lg border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+            title="首页"
+          >
+            <ChevronsLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => goPage(page - 1)}
+            disabled={page === 1}
+            className="p-1.5 rounded-lg border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+            title="上一页"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+              let p: number
+              if (totalPages <= 7) {
+                p = i + 1
+              } else if (page <= 4) {
+                p = i + 1
+              } else if (page >= totalPages - 3) {
+                p = totalPages - 6 + i
+              } else {
+                p = page - 3 + i
+              }
+              return (
+                <button
+                  key={p}
+                  onClick={() => goPage(p)}
+                  className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                    page === p
+                      ? 'bg-primary-500 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {p}
+                </button>
+              )
+            })}
+          </div>
+
+          <button
+            onClick={() => goPage(page + 1)}
+            disabled={page === totalPages}
+            className="p-1.5 rounded-lg border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+            title="下一页"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => goPage(totalPages)}
+            disabled={page === totalPages}
+            className="p-1.5 rounded-lg border border-slate-200 disabled:opacity-30 hover:bg-slate-50 transition-colors"
+            title="末页"
+          >
+            <ChevronsRight className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

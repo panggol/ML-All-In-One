@@ -17,6 +17,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..'
 
 from api.database import DataFile, User, SessionLocal, get_db
 from api.auth import get_current_user
+from api.services.log_aggregator import (
+    set_request_context, get_request_id,
+    log_preprocessing, log_error,
+)
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -251,6 +258,21 @@ async def preview_preprocessing(
     db: Session = Depends(get_db),
 ):
     """预览预处理效果（仅处理前 PREVIEW_ROWS 行，不保存）"""
+    # 设置日志上下文
+    set_request_context(get_request_id() or "", str(current_user.id), module="preprocessing")
+
+    log_preprocessing(
+        event="preview_start",
+        data_file_id=request.data_file_id,
+        user_id=str(current_user.id),
+        detail={
+            "imputer": request.steps.imputer.model_dump(),
+            "scaler": request.steps.scaler.model_dump(),
+            "feature_select": request.steps.feature_select.model_dump(),
+        },
+        level=logging.INFO,
+    )
+
     # 获取数据文件
     data_file = db.query(DataFile).filter(
         DataFile.id == request.data_file_id,
@@ -269,6 +291,13 @@ async def preview_preprocessing(
         if df.shape[0] > PREVIEW_ROWS:
             df = df.head(PREVIEW_ROWS)
     except Exception as e:
+        log_preprocessing(
+            event="preview_error",
+            data_file_id=request.data_file_id,
+            user_id=str(current_user.id),
+            detail={"error": str(e), "error_type": type(e).__name__},
+            level=logging.ERROR,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"读取文件失败: {str(e)}",
@@ -320,6 +349,18 @@ async def preview_preprocessing(
     # 计算统计信息
     stats = _compute_stats(df_original, df_transformed)
 
+    log_preprocessing(
+        event="preview_complete",
+        data_file_id=request.data_file_id,
+        user_id=str(current_user.id),
+        detail={
+            "original_rows": PREVIEW_ROWS,
+            "transformed_columns": len(df_transformed.columns),
+            "steps_applied": "imputer, scaler, feature_select",
+        },
+        level=logging.INFO,
+    )
+
     return PreviewResponse(
         original_preview=original_preview,
         transformed_preview=transformed_preview,
@@ -336,6 +377,22 @@ async def transform_and_save(
     db: Session = Depends(get_db),
 ):
     """应用预处理并保存为新数据集"""
+    # 设置日志上下文
+    set_request_context(get_request_id() or "", str(current_user.id), module="preprocessing")
+
+    log_preprocessing(
+        event="transform_start",
+        data_file_id=request.data_file_id,
+        user_id=str(current_user.id),
+        detail={
+            "imputer": request.steps.imputer.model_dump(),
+            "scaler": request.steps.scaler.model_dump(),
+            "feature_select": request.steps.feature_select.model_dump(),
+            "output_name": request.output_name,
+        },
+        level=logging.INFO,
+    )
+
     # 获取数据文件
     data_file = db.query(DataFile).filter(
         DataFile.id == request.data_file_id,
@@ -351,6 +408,13 @@ async def transform_and_save(
     try:
         df = pd.read_csv(data_file.filepath)
     except Exception as e:
+        log_preprocessing(
+            event="transform_error",
+            data_file_id=request.data_file_id,
+            user_id=str(current_user.id),
+            detail={"error": str(e), "error_type": type(e).__name__},
+            level=logging.ERROR,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"读取文件失败: {str(e)}",
@@ -401,6 +465,19 @@ async def transform_and_save(
     db.add(new_data_file)
     db.commit()
     db.refresh(new_data_file)
+
+    log_preprocessing(
+        event="transform_complete",
+        data_file_id=new_data_file.id,
+        user_id=str(current_user.id),
+        detail={
+            "input_file_id": request.data_file_id,
+            "output_filename": output_filename,
+            "rows": len(df_transformed),
+            "columns": len(df_transformed.columns),
+        },
+        level=logging.INFO,
+    )
 
     return TransformResponse(
         data_file_id=new_data_file.id,
