@@ -5,6 +5,7 @@ export { trainApi } from './train'
 export { experimentApi } from './experiments'
 export { vizApi } from './viz'
 export { logsApi } from './logs'
+export { adminApi } from './admin'
 
 export type { LoginRequest, RegisterRequest, AuthResponse, User } from './auth'
 export type { DataFile } from './data'
@@ -27,4 +28,5 @@ export type {
   ImputerConfig, ScalerConfig, FeatureSelectConfig, PreprocessingSteps,
   ColumnStats, PreviewResponse, TransformResponse
 } from './preprocessing'
+export type { AdminUser, UserListResponse, CreateUserRequest, UpdateUserRequest } from './admin'
 

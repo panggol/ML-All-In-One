@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from api.database import engine, Base
-from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing, monitor, logs, platform_logs
+from api.routes import auth, data, train, experiments, models, viz, automl, preprocessing, monitor, logs, platform_logs, admin
 from api.auth import get_or_create_admin_user
 import os
 from api.middleware.logging_middleware import PlatformLoggingMiddleware
@@ -79,6 +79,7 @@ app.include_router(preprocessing.router, prefix="/api/preprocessing", tags=["预
 app.include_router(monitor.router, prefix="/api/monitor", tags=["系统监控"])
 app.include_router(logs.router, prefix="/api/logs", tags=["日志"])
 app.include_router(platform_logs.router, prefix="/api/platform-logs", tags=["平台日志"])
+app.include_router(admin.router, prefix="/api/admin", tags=["用户管理"])
 
 @app.get("/")
 async def root():

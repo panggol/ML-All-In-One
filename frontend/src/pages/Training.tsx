@@ -1102,19 +1102,13 @@ export default function Training() {
                   onChange={e => setTaskType(e.target.value as typeof taskType)}
                   disabled={configDisabled}
                 />
-                <Input
+                <Select
                   label="目标列"
+                  options={allColumns.map(col => ({ value: col, label: col }))}
                   value={targetColumn}
                   onChange={e => setTargetColumn(e.target.value)}
-                  placeholder="输入目标列名"
                   disabled={configDisabled}
-                  list="target-column-suggestions"
                 />
-                {allColumns.length > 0 && (
-                  <datalist id="target-column-suggestions">
-                    {allColumns.map(col => <option key={col} value={col} />)}
-                  </datalist>
-                )}
               </div>
 
               {/* Feature selection — inline, second group */}
