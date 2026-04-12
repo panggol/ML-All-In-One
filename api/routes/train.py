@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..'
 from api.database import TrainingJob, DataFile, TrainedModel, User, SessionLocal, get_db
 from api.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 # 模型保存目录
 MODELS_DIR = os.getenv("MODELS_DIR", "./models")
