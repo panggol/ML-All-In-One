@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import Card from '../components/Card'
 import Button from '../components/Button'
 import Select from '../components/Select'
-import Input from '../components/Input'
 import ProgressBar from '../components/ProgressBar'
 import { dataApi, trainApi, TrainJob, TrainStatus, MetricsCurve } from '../api'
 
@@ -820,7 +819,8 @@ export default function Training() {
   const loadFileColumns = async (fileId: number) => {
     try {
       const stats = await dataApi.stats(fileId)
-      setAllColumns(stats.columns || [])
+      const cols = stats.column_stats?.map((s: any) => s.column) || []
+      setAllColumns(cols)
     } catch (err) {
       console.error('Failed to load file columns:', err)
     }
@@ -842,9 +842,10 @@ export default function Training() {
       setSelectedFile(uploadedFile.id)
 
       const stats = await dataApi.stats(uploadedFile.id)
-      if (stats.columns?.length > 0) {
-        setAllColumns(stats.columns)
-        setTargetColumn(stats.columns[stats.columns.length - 1])
+      const cols = stats.column_stats?.map((s: any) => s.column) || []
+      if (cols.length > 0) {
+        setAllColumns(cols)
+        setTargetColumn(cols[cols.length - 1])
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || '文件上传失败'
