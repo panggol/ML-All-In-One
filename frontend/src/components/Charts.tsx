@@ -101,6 +101,116 @@ export function HistogramChart({
   )
 }
 
+// ─── Boxplot Chart ───────────────────────────────────────────────────────────────
+
+export interface BoxplotDatum {
+  feature: string
+  min: number
+  q1: number
+  median: number
+  q3: number
+  max: number
+  whisker_low: number
+  whisker_high: number
+  outliers: number[]
+}
+
+interface BoxplotChartProps {
+  data: BoxplotDatum[]
+  loading?: boolean
+  emptyText?: string
+  color?: string
+  height?: number
+}
+
+export function BoxplotChart({
+  data,
+  loading = false,
+  emptyText = '暂无箱线图数据',
+  color = '#6366f1',
+  height = 280,
+}: BoxplotChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex items-center justify-center" style={{ height }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          <span className="text-sm text-slate-400">加载中…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center text-slate-400" style={{ height }}>
+        <span className="text-sm">{emptyText}</span>
+      </div>
+    )
+  }
+
+  // 转换为 Recharts BoxPlot 数据格式
+  const chartData = data.map(d => ({
+    name: d.feature,
+    min: d.whisker_low,
+    q1: d.q1,
+    median: d.median,
+    q3: d.q3,
+    max: d.whisker_high,
+    outliers: d.outliers,
+  }))
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={chartData} margin={{ top: 16, right: 24, left: -12, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} />
+        <YAxis tick={{ fontSize: 12, fill: '#64748b' }} />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            fontSize: 12,
+          }}
+          formatter={(value: number, name: string) => {
+            const labels: Record<string, string> = {
+              min: '最小值', q1: 'Q1 (25%)', median: '中位数',
+              q3: 'Q3 (75%)', max: '最大值'
+            }
+            return [typeof value === 'number' ? value.toFixed(4) : value, labels[name] ?? name]
+          }}
+        />
+        {/* 箱体（用柱状图模拟IQR） */}
+        <Bar
+          dataKey="q3"
+          stackId="box"
+          fill={color}
+          opacity={0.4}
+          name="Q3"
+        />
+        <Bar
+          dataKey="q1"
+          stackId="box"
+          fill="transparent"
+        />
+        {/* 异常值散点 */}
+        <ScatterChart>
+          <ZAxis range={[30, 60]} />
+          <Scatter
+            name="异常值"
+            data={chartData.flatMap(d =>
+              (d.outliers || []).map(o => ({ x: d.name, y: o }))
+            )}
+            fill="#ef4444"
+            fillOpacity={0.7}
+          />
+        </ScatterChart>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 // ─── Scatter Chart ────────────────────────────────────────────────────────────
 
 interface ScatterChartComponentProps {

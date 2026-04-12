@@ -8,9 +8,11 @@ import {
   ScatterChartComponent,
   FeatureImportanceChart,
   TrainingCurvesChart,
+  BoxplotChart,
   type HistogramDatum,
   type ScatterDatum,
   type FeatureImportanceDatum,
+  type BoxplotDatum,
 } from '../components/Charts'
 import { dataApi, experimentApi, vizApi } from '../api'
 import type { DataFile, Experiment } from '../api'
@@ -52,7 +54,7 @@ export default function DataVisualization() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [selectedDataFile, setSelectedDataFile] = useState<number | null>(null)
   const [selectedExp, setSelectedExp] = useState<number | null>(null)
-  const [plotType, setPlotType] = useState<'histogram' | 'boxplot'>('histogram')
+  const [plotType, setPlotType] = useState<'histogram' | 'boxplot' | 'scatter' | 'line'>('histogram')
   const [selectedFeature, setSelectedFeature] = useState<string>('')
   const [selectedTab, setSelectedTab] = useState<'distribution' | 'importance' | 'evaluation' | 'training'>('distribution')
 
@@ -63,6 +65,7 @@ export default function DataVisualization() {
   const [impError, setImpError] = useState<string>('')
 
   const [distData, setDistData] = useState<HistogramDatum[]>([])
+  const [boxplotData, setBoxplotData] = useState<BoxplotDatum[]>([])
   const [scatterData, setScatterData] = useState<ScatterDatum[]>([])
   const [importanceData, setImportanceData] = useState<FeatureImportanceDatum[]>([])
   const [distLoaded, setDistLoaded] = useState(false)
@@ -95,19 +98,38 @@ export default function DataVisualization() {
     setDistLoaded(false)
     try {
       const data = await vizApi.getDistributions(selectedDataFile, { plot_type: plotType })
-      // 取第一个数值特征的直方图数据
-      const numericPlot = data.plots.find((p) => p.dtype !== 'object' && p.stats.histogram)
-      if (numericPlot?.stats.histogram) {
-        setDistData(toHistogramData(numericPlot.stats))
+      // 始终找数值特征（有任一统计数据的）
+      const numericPlot = data.plots.find((p) => p.dtype !== 'object' && (
+        p.stats.histogram || p.stats.boxplot
+      ))
+      if (numericPlot) {
         setSelectedFeature(numericPlot.feature)
+        if (numericPlot.stats.histogram) {
+          setDistData(toHistogramData(numericPlot.stats))
+        } else {
+          setDistData([])
+        }
+        if (numericPlot.stats.boxplot) {
+          setBoxplotData([{
+            feature: numericPlot.feature,
+            ...numericPlot.stats.boxplot,
+          }])
+        } else {
+          setBoxplotData([])
+        }
       } else if (data.plots.length > 0) {
         setSelectedFeature(data.plots[0].feature)
-        setDistData(toHistogramData(data.plots[0].stats))
+        setDistData(data.plots[0].stats.histogram ? toHistogramData(data.plots[0].stats) : [])
+        setBoxplotData(data.plots[0].stats.boxplot ? [{
+          feature: data.plots[0].feature,
+          ...data.plots[0].stats.boxplot,
+        }] : [])
       }
       setSummary({ rows: data.dataset_info.rows, columns: data.dataset_info.columns, numeric_features: data.plots.filter(p => p.dtype !== 'object').length })
       setDistLoaded(true)
     } catch (e: any) {
       setDistError(e?.response?.data?.detail || '加载失败')
+      setDistLoaded(true)
     } finally {
       setLoadingDist(false)
     }
@@ -294,9 +316,11 @@ export default function DataVisualization() {
                   options={[
                     { value: 'histogram', label: '直方图' },
                     { value: 'boxplot', label: '箱线图' },
+                    { value: 'scatter', label: '散点图' },
+                    { value: 'line', label: '折线图' },
                   ]}
                   value={plotType}
-                  onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot')}
+                  onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot' | 'scatter' | 'line')}
                   className="w-28"
                 />
                 <Select
@@ -316,13 +340,30 @@ export default function DataVisualization() {
               </div>
             )}
 
-            <HistogramChart
-              data={distData}
-              loading={loadingDist || !distLoaded}
-              emptyText={selectedDataFile ? '暂无分布数据' : '请先选择数据集'}
-              color="#6366f1"
-              height={280}
-            />
+            {plotType === 'histogram' && (
+              <HistogramChart
+                data={distData}
+                loading={loadingDist || !distLoaded}
+                emptyText={selectedDataFile ? '暂无直方图数据' : '请先选择数据集'}
+                color="#6366f1"
+                height={280}
+              />
+            )}
+            {plotType === 'boxplot' && (
+              <BoxplotChart
+                data={boxplotData}
+                loading={loadingDist || !distLoaded}
+                emptyText={selectedDataFile ? '暂无箱线图数据' : '请先选择数据集'}
+                color="#6366f1"
+                height={280}
+              />
+            )}
+            {(plotType === 'scatter' || plotType === 'line') && (
+              <div className="flex flex-col items-center justify-center" style={{ height: 280 }}>
+                <AlertCircle className="w-8 h-8 text-slate-300 mb-3" />
+                <p className="text-sm text-slate-400">暂不支持 {plotType === 'scatter' ? '散点图' : '折线图'}，请选择「直方图」或「箱线图」</p>
+              </div>
+            )}
 
             {distLoaded && distData.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
