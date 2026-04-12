@@ -28,7 +28,7 @@ export const DASHBOARD_POLL_INTERVAL_MS = 30000
 // ============ 样式映射 ============
 /** 使用率文本颜色 */
 export function getUsageColorClass(percent: number): string {
-  if (percent >= THRESHOLD_YELLOW_MAX) return 'text-red-600'
+  if (percent >= THRESHOLD_YELLOW_MAX) return 'text-orange-500'
   if (percent >= THRESHOLD_GREEN_MAX) return 'text-amber-600'
   return 'text-emerald-600'
 }
