@@ -1,6 +1,6 @@
 # 🤖 ML All In One - 项目进度
 
-_最后更新：2026-04-12 18:24_
+_最后更新：2026-04-13 02:05_
 
 ## 📊 模块进度
 
@@ -27,8 +27,10 @@ _最后更新：2026-04-12 18:24_
 | 平台统一日志中心 | 1/1 | ✅ 完成 | platform_logs；汇聚API/Auth/预处理日志；5 tests；6轮迭代 |
 | 训练页面重构 | 1/1 | ✅ 完成 | Training.tsx；去掉折叠+字母分组+实时曲线+日志面板+二次确认；11 tests；3轮 |
 | 内置管理员账户 | 1/1 | ✅ 完成 | admin_account_seed；role+is_protected字段；幂等种子；11 tests；2轮迭代 |
+| 用户管理页面 | 1/1 | ✅ 完成 | admin_users；第二轮QA通过（15/15 tests）；P0修复验证：PrivateRoute role检查 + visibleTabs动态过滤；9个业务层pytest测试全部PASS；TypeScript EXIT_CODE=0；前端构建成功 |
 
 **✅ 全量测试：约 450+ passed（2026-04-12）**
+**✅ E2E 测试：65/66 通过，98.5%（2026-04-13 全模块测试运动）**
 
 ## 📁 项目结构
 

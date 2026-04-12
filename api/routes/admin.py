@@ -68,7 +68,7 @@ async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员权限_required"
+            detail="管理员权限不足"
         )
     return current_user
 
@@ -254,18 +254,18 @@ async def delete_user(
             detail="用户不存在"
         )
 
+    # 业务规则：不可删除自己（优先级最高）
+    if admin_user.id == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="不能删除自己的账户"
+        )
+
     # 业务规则：受保护用户不可删除
     if user.is_protected:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="受保护用户不可删除"
-        )
-
-    # 业务规则：不可删除自己
-    if admin_user.id == user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="不能删除自己的账户"
         )
 
     db.delete(user)

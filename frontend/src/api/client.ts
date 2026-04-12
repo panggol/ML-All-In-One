@@ -25,13 +25,19 @@ api.interceptors.request.use(
 )
 
 // 响应拦截器：处理 401
+// 注意：只有在有 token 的情况下才 redirect（token 过期）。
+// 登录失败（无 token 或凭据错误）不应 redirect，由调用方处理错误。
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+      // 只有用户已登录（有 token）时才 redirect
+      const token = localStorage.getItem('token')
+      if (token) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

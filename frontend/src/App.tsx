@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity, BarChart3, FileText } from 'lucide-react'
+import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity, BarChart3, FileText, ShieldCheck } from 'lucide-react'
 import { useState, useEffect, lazy, Suspense } from 'react'
 // 懒加载页面组件，减少主包体积
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -13,6 +13,7 @@ const DataManagement = lazy(() => import('./pages/DataManagement'))
 const DataVisualization = lazy(() => import('./pages/DataVisualization'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const Logs = lazy(() => import('./pages/Logs'))
+const AdminUsers = lazy(() => import('./pages/AdminUsers'))
 
 // 懒加载页面的加载状态
 function PageLoader() {
@@ -26,7 +27,7 @@ function PageLoader() {
   )
 }
 
-type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data' | 'visualization' | 'logs'
+type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data' | 'visualization' | 'logs' | 'admin'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
@@ -39,6 +40,7 @@ const tabs = [
   { id: 'automl' as const, label: 'AutoML', icon: Sparkles },
   { id: 'visualization' as const, label: '数据可视化', icon: BarChart3 },
   { id: 'logs' as const, label: '日志', icon: FileText },
+  { id: 'admin' as const, label: '用户管理', icon: ShieldCheck },
 ]
 
 // 私有路由包装
@@ -46,6 +48,19 @@ function PrivateRoute() {
   const token = localStorage.getItem('token')
   if (!token) {
     return <Navigate to="/login" replace />
+  }
+  // 权限检查（P0-F8/S6）：非 admin 用户不可访问管理路由
+  const userStr = localStorage.getItem('user')
+  if (userStr) {
+    try {
+      const user = JSON.parse(userStr)
+      const path = window.location.pathname
+      if (path.startsWith('/admin') && user.role !== 'admin') {
+        return <Navigate to="/dashboard" replace />
+      }
+    } catch {
+      // ignore parse errors
+    }
   }
   return <Outlet />
 }
@@ -61,7 +76,8 @@ function Layout() {
   // Sync activeTab with URL on mount and URL change
   useEffect(() => {
     const path = location.pathname
-    if (path.includes('/logs')) setActiveTab('logs')
+    if (path.includes('/admin')) setActiveTab('admin')
+    else if (path.includes('/logs')) setActiveTab('logs')
     else if (path.includes('/visualization')) setActiveTab('visualization')
     else if (path.includes('/monitor')) setActiveTab('monitor')
     else if (path.includes('/data')) setActiveTab('data')
@@ -86,6 +102,16 @@ function Layout() {
     navigate('/login')
   }
 
+  // 计算当前用户角色，用于动态过滤侧边栏 tabs
+  const userRole = (() => {
+    const u = localStorage.getItem('user')
+    if (!u) return 'user'
+    try { return JSON.parse(u).role || 'user' } catch { return 'user' }
+  })()
+
+  // 动态 tabs（P0-S6）：非 admin 用户不显示"用户管理" tab
+  const visibleTabs = tabs.filter(tab => tab.id !== 'admin' || userRole === 'admin')
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Left Sidebar */}
@@ -101,7 +127,7 @@ function Layout() {
         {/* Nav Tabs */}
         <nav className="flex-1 py-4 px-3 overflow-y-auto">
           <div className="space-y-1">
-            {tabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => {
@@ -177,6 +203,7 @@ function Layout() {
             {activeTab === 'automl' && <AutoML />}
             {activeTab === 'visualization' && <DataVisualization />}
             {activeTab === 'logs' && <Logs />}
+            {activeTab === 'admin' && <AdminUsers />}
           </Suspense>
         </main>
       </div>
@@ -202,6 +229,7 @@ function App() {
             <Route path="/automl" element={<Layout />} />
             <Route path="/visualization" element={<Layout />} />
             <Route path="/logs" element={<Layout />} />
+            <Route path="/admin/users" element={<Layout />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
