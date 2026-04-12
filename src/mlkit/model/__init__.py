@@ -197,16 +197,26 @@ class XGBoostModel(SKLearnModel):
         from xgboost import XGBClassifier, XGBRegressor
 
         # 弹出内部参数，不传递给 XGBoost
-        kwargs.pop("task", None)
+        task = kwargs.pop("task", None)
         kwargs.pop("model_class", None)
 
-        # 根据任务类型选择模型
-        if kwargs.get("objective", "binary:logistic").startswith(
-            "binary:"
-        ) or kwargs.get("objective", "multi:softmax").startswith("multi:"):
-            model = XGBClassifier(**kwargs)
-        else:
+        # 根据 task 参数优先选择模型；若无 task 则回退到 objective 判断
+        regression_objectives = {
+            "reg:squarederror", "reg:squaredlogerror", "reg:logistic",
+            "reg:gamma", "reg:tweedie", "reg:pseudohubererror",
+            "count:poisson", "survival:cox", "survival:aft",
+        }
+        if task == "regression":
             model = XGBRegressor(**kwargs)
+        elif task == "classification":
+            model = XGBClassifier(**kwargs)
+        elif kwargs.get("objective", "binary:logistic").startswith(("binary:", "multi:")):
+            model = XGBClassifier(**kwargs)
+        elif kwargs.get("objective", "") in regression_objectives:
+            model = XGBRegressor(**kwargs)
+        else:
+            # 默认为分类器（向后兼容）
+            model = XGBClassifier(**kwargs)
 
         super().__init__(
             model,
@@ -490,11 +500,21 @@ def create_model(model_type: str, **kwargs) -> BaseModel:
             "regression", "regression_l1", "regression_l2", "mape",
             "poisson", "tweedie", "gamma"
         }
-        task = "regression" if objective in regression_objectives else "classification"
+        # task 可能已在 kwargs 中（显式传入），优先使用；否则从 objective 推断
+        task = kwargs.pop("task", None) or ("regression" if objective in regression_objectives else "classification")
         return LightGBMModel(task=task, **kwargs)
 
     elif model_type == "pytorch":
         import torch.nn as nn
+
+        model_class_name = kwargs.pop("model_class", None)
+
+        if model_class_name == "MLPClassifier":
+            from .pytorch_model import MLPClassifier as PyTorchMLP
+
+            task = kwargs.pop("task", "classification")
+            # hidden_layer_sizes may come as tuple/list
+            return PyTorchMLP(task=task, **kwargs)
 
         model = kwargs.pop("model", None)
         if model is None:

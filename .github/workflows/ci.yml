@@ -29,13 +29,13 @@ jobs:
         run: pip install black ruff mypy
 
       - name: Run Black
-        run: black --check src/ tests/ examples/ api/ --exclude '/(\.git|\.pytest_cache|\.ruff_cache|\.mypy_cache|node_modules|\.venv)/' 2>&1 || true
+        run: black --check src/ tests/ api/ --exclude '/(\.git|\.pytest_cache|\.ruff_cache|\.mypy_cache|node_modules|\.venv)/'
 
       - name: Run Ruff
-        run: ruff check src/ tests/ api/ 2>&1 || true
+        run: ruff check src/ tests/ api/
 
       - name: Run MyPy
-        run: mypy src/ --ignore-missing-imports --follow-imports=skip 2>&1 || true
+        run: mypy src/ --ignore-missing-imports --follow-imports=skip
 
   # ─── Python Tests ───────────────────────────────────────────────────────────
   test:
@@ -67,9 +67,7 @@ jobs:
         run: pip install -e .
 
       - name: Test with pytest
-        run: |
-          python -m pytest tests/ -v --tb=short --cov=src/mlkit --cov-report=term-missing 2>&1 | tail -40
-          echo "EXIT_CODE=$?"
+        run: pytest tests/ -v --tb=short --cov=src/mlkit --cov-report=term-missing
 
       - name: Upload coverage
         if: always()
@@ -106,7 +104,7 @@ jobs:
 
       - name: TypeScript check
         working-directory: frontend
-        run: npx tsc --noEmit 2>&1 || true
+        run: npx tsc --noEmit
 
       - name: Build frontend
         working-directory: frontend
@@ -144,6 +142,32 @@ jobs:
       - name: Run smoke test
         run: |
           docker run --rm mlkit:ci-${{ github.sha }} python -c "import mlkit; print('mlkit OK:', mlkit.__version__)" 2>&1
+
+  # ─── Data Authenticity ───────────────────────────────────────────────────────
+  # 曾玺新增要求：验证 API 响应数据真实性（不是全0/全空/全null等明显伪造数据）
+  data-authenticity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple || pip install -r requirements.txt
+
+      - name: Install mlkit
+        run: pip install -e .
+
+      - name: Run data authenticity tests
+        run: pytest tests/test_data_authenticity.py -v --tb=short
 
   # ─── Full CI Summary ────────────────────────────────────────────────────────
   ci-summary:

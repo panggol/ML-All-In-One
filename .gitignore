@@ -130,6 +130,15 @@ reviews/
 *.pkl
 *.joblib
 
+# Local task tracking
+tasks.json
+task_state.json
+
+# Screenshots & harness reports (not source code)
+screenshots/
+harness/
+*.db
+
 # Demo data
 demo_data/
 .ruff_cache/

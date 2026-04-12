@@ -38,6 +38,13 @@ export const dataApi = {
     return response.data
   },
 
+  export: async (id: number): Promise<Blob> => {
+    const response = await api.get(`/data/${id}/export`, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
+
   stats: async (id: number) => {
     const response = await api.get(`/data/${id}/stats`)
     return response.data

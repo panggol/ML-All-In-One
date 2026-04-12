@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity } from 'lucide-react'
+import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity, BarChart3, FileText } from 'lucide-react'
 import { useState, useEffect, lazy, Suspense } from 'react'
 // 懒加载页面组件，减少主包体积
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -10,7 +10,9 @@ const AutoML = lazy(() => import('./pages/AutoML'))
 const Preprocessing = lazy(() => import('./pages/Preprocessing'))
 const Inference = lazy(() => import('./pages/Inference'))
 const DataManagement = lazy(() => import('./pages/DataManagement'))
+const DataVisualization = lazy(() => import('./pages/DataVisualization'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
+const Logs = lazy(() => import('./pages/Logs'))
 
 // 懒加载页面的加载状态
 function PageLoader() {
@@ -24,7 +26,7 @@ function PageLoader() {
   )
 }
 
-type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data'
+type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data' | 'visualization' | 'logs'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
@@ -35,6 +37,8 @@ const tabs = [
   { id: 'preprocessing' as const, label: '预处理', icon: Wand },
   { id: 'inference' as const, label: '推理', icon: Cpu },
   { id: 'automl' as const, label: 'AutoML', icon: Sparkles },
+  { id: 'visualization' as const, label: '数据可视化', icon: BarChart3 },
+  { id: 'logs' as const, label: '日志', icon: FileText },
 ]
 
 // 私有路由包装
@@ -57,7 +61,9 @@ function Layout() {
   // Sync activeTab with URL on mount and URL change
   useEffect(() => {
     const path = location.pathname
-    if (path.includes('/monitor')) setActiveTab('monitor')
+    if (path.includes('/logs')) setActiveTab('logs')
+    else if (path.includes('/visualization')) setActiveTab('visualization')
+    else if (path.includes('/monitor')) setActiveTab('monitor')
     else if (path.includes('/data')) setActiveTab('data')
     else if (path.includes('/training')) setActiveTab('training')
     else if (path.includes('/experiments')) setActiveTab('experiments')
@@ -81,18 +87,20 @@ function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-semibold text-slate-900">ML All In One</span>
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Left Sidebar */}
+      <aside className="w-56 bg-white border-r border-slate-200 flex flex-col fixed left-0 top-0 h-screen">
+        {/* Logo */}
+        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-200">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
-          
-          <nav className="flex items-center gap-1">
+          <span className="text-base font-semibold text-slate-900">ML All In One</span>
+        </div>
+
+        {/* Nav Tabs */}
+        <nav className="flex-1 py-4 px-3 overflow-y-auto">
+          <div className="space-y-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -100,62 +108,78 @@ function Layout() {
                   setActiveTab(tab.id)
                   navigate('/' + (tab.id === 'dashboard' ? 'dashboard' : tab.id))
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-150 ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 text-left ${
                   activeTab === tab.id
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
+                <tab.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm">{tab.label}</span>
               </button>
             ))}
-          </nav>
+          </div>
+        </nav>
 
-          {/* User Menu */}
+        {/* User Menu */}
+        <div className="p-3 border-t border-slate-200">
           <div className="relative">
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
             >
-              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                <User className="w-4 h-4 text-primary-600" />
+              <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <User className="w-3.5 h-3.5 text-primary-600" />
               </div>
-              <span className="text-sm font-medium text-slate-700">{user?.username || '用户'}</span>
+              <span className="text-sm font-medium text-slate-700 truncate">{user?.username || '用户'}</span>
             </button>
-            
+
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1">
-                <div className="px-4 py-2 border-b border-slate-100">
-                  <p className="font-medium text-slate-900">{user?.username}</p>
-                  <p className="text-xs text-slate-500">{user?.email}</p>
+              <div className="absolute left-0 bottom-full mb-1 w-full bg-white rounded-xl shadow-lg border border-slate-200 py-1">
+                <div className="px-3 py-2 border-b border-slate-100">
+                  <p className="font-medium text-slate-900 text-sm">{user?.username}</p>
+                  <p className="text-xs text-slate-500 truncate">{user?.email}</p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5" />
                   退出登录
                 </button>
               </div>
             )}
           </div>
         </div>
-      </header>
+      </aside>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <Suspense fallback={<PageLoader />}>
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'monitor' && <Monitor />}
-          {activeTab === 'data' && <DataManagement />}
-          {activeTab === 'training' && <Training />}
-          {activeTab === 'experiments' && <Experiments />}
-          {activeTab === 'preprocessing' && <Preprocessing />}
-          {activeTab === 'inference' && <Inference />}
-          {activeTab === 'automl' && <AutoML />}
-        </Suspense>
-      </main>
+      {/* Main Content Area */}
+      <div className="flex-1 ml-56">
+        {/* Top Bar */}
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-50 h-16">
+          <div className="h-full px-8 flex items-center">
+            <h1 className="text-lg font-semibold text-slate-800">
+              {tabs.find(t => t.id === activeTab)?.label || 'ML All In One'}
+            </h1>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="px-8 py-8">
+          <Suspense fallback={<PageLoader />}>
+            {activeTab === 'dashboard' && <Dashboard />}
+            {activeTab === 'monitor' && <Monitor />}
+            {activeTab === 'data' && <DataManagement />}
+            {activeTab === 'training' && <Training />}
+            {activeTab === 'experiments' && <Experiments />}
+            {activeTab === 'preprocessing' && <Preprocessing />}
+            {activeTab === 'inference' && <Inference />}
+            {activeTab === 'automl' && <AutoML />}
+            {activeTab === 'visualization' && <DataVisualization />}
+            {activeTab === 'logs' && <Logs />}
+          </Suspense>
+        </main>
+      </div>
     </div>
   )
 }
@@ -176,6 +200,8 @@ function App() {
             <Route path="/preprocessing" element={<Layout />} />
             <Route path="/inference" element={<Layout />} />
             <Route path="/automl" element={<Layout />} />
+            <Route path="/visualization" element={<Layout />} />
+            <Route path="/logs" element={<Layout />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

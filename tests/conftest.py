@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+# Set JWT secret for tests before any api imports
+os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_pytest_only_do_not_use_in_production"
+
 # Add src to path for mlkit imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

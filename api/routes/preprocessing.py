@@ -3,15 +3,16 @@
 预处理 API - 数据预处理流水线接口
 """
 import os
-import sys
+import re
 import pandas as pd
 import numpy as np
-from typing import Optional, List
+from typing import Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 
+import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..'))
 
 from api.database import DataFile, User, SessionLocal, get_db
@@ -22,12 +23,30 @@ router = APIRouter()
 # 预览行数限制
 PREVIEW_ROWS = 1000
 
+# ============ 安全工具函数 ============
+
+def safe_filename(name: str) -> str:
+    """
+    过滤文件名中的危险字符，防止路径遍历攻击。
+    - 过滤 .. 、 / 、 \\ 等路径分隔符
+    - 只允许字母数字下划线连字符和点号
+    - 限制最大长度为 200 字符
+    """
+    name = name.replace('..', '')
+    name = re.sub(r'[\\/]', '_', name)
+    name = re.sub(r'[^\w\-_.]', '_', name)
+    return name[:200]
+
+
+# 转换端点文件大小阈值（500MB）
+TRANSFORM_MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
+
 
 # ============ Pydantic 模型 ============
 
 class ImputerConfig(BaseModel):
     enabled: bool = False
-    strategy: str = "mean"  # mean, median, most_frequent, constant
+    strategy: Literal["mean", "median", "most_frequent", "constant"] = "mean"  # mean, median, most_frequent, constant
 
 
 class ScalerConfig(BaseModel):
@@ -37,7 +56,7 @@ class ScalerConfig(BaseModel):
 
 class FeatureSelectConfig(BaseModel):
     enabled: bool = False
-    threshold: float = 0.0
+    threshold: float = Field(0.0, ge=0.0)  # P2-3: 方差阈值不允许负数
     selected_columns: List[str] = []
 
 
@@ -349,15 +368,23 @@ async def transform_and_save(
     df_transformed = _apply_scaler(df_transformed, request.steps.scaler)
     df_transformed = _apply_feature_select(df_transformed, request.steps.feature_select)
 
-    # 生成输出文件名
+    # P1-2: 文件大小检查，防止 GB 级 CSV 导致 OOM
+    file_size = os.path.getsize(data_file.filepath)
+    if file_size > TRANSFORM_MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"文件超过大小限制 ({TRANSFORM_MAX_FILE_SIZE // 1024 // 1024}MB)",
+        )
+
+    # P0: 安全过滤 output_name，防止路径遍历
     base_name = os.path.splitext(data_file.filename)[0]
-    output_name = request.output_name or f"{base_name}_preprocessed"
-    output_filename = f"{output_name}.csv"
+    safe_name = safe_filename(request.output_name or f"{base_name}_preprocessed")
+    output_filename = f"{safe_name}.csv"
 
     # 保存目录
     save_dir = os.path.join(os.path.dirname(data_file.filepath), "preprocessed")
     os.makedirs(save_dir, exist_ok=True)
-    
+
     output_path = os.path.join(save_dir, output_filename)
     df_transformed.to_csv(output_path, index=False)
 

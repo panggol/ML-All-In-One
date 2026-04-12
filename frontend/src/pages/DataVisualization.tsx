@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { BarChart3, TrendingUp, Layers, RefreshCw, AlertCircle } from 'lucide-react'
+import { BarChart3, TrendingUp, Layers, RefreshCw, AlertCircle, Activity } from 'lucide-react'
 import Card from '../components/Card'
 import Select from '../components/Select'
 import Button from '../components/Button'
@@ -7,12 +7,14 @@ import {
   HistogramChart,
   ScatterChartComponent,
   FeatureImportanceChart,
+  TrainingCurvesChart,
   type HistogramDatum,
   type ScatterDatum,
   type FeatureImportanceDatum,
 } from '../components/Charts'
 import { dataApi, experimentApi, vizApi } from '../api'
 import type { DataFile, Experiment } from '../api'
+import type { TrainingCurvesResponse } from '../api/viz'
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ export default function DataVisualization() {
   const [selectedExp, setSelectedExp] = useState<number | null>(null)
   const [plotType, setPlotType] = useState<'histogram' | 'boxplot'>('histogram')
   const [selectedFeature, setSelectedFeature] = useState<string>('')
+  const [selectedTab, setSelectedTab] = useState<'distribution' | 'importance' | 'evaluation' | 'training'>('distribution')
 
   const [loadingDist, setLoadingDist] = useState(false)
   const [loadingScatter, setLoadingScatter] = useState(false)
@@ -65,6 +68,10 @@ export default function DataVisualization() {
   const [distLoaded, setDistLoaded] = useState(false)
   const [scatterLoaded, setScatterLoaded] = useState(false)
   const [importanceLoaded, setImportanceLoaded] = useState(false)
+  const [loadingCurves, setLoadingCurves] = useState(false)
+  const [curvesLoaded, setCurvesLoaded] = useState(false)
+  const [curvesError, setCurvesError] = useState<string>('')
+  const [curvesData, setCurvesData] = useState<TrainingCurvesResponse | null>(null)
 
   const [summary, setSummary] = useState<{ rows: number; columns: number; numeric_features: number } | null>(null)
 
@@ -152,6 +159,24 @@ export default function DataVisualization() {
     }
   }, [selectedExp])
 
+  // 加载训练曲线
+  const loadTrainingCurves = useCallback(async () => {
+    if (!selectedExp) return
+    setLoadingCurves(true)
+    setCurvesError('')
+    setCurvesLoaded(false)
+    try {
+      const data = await vizApi.getTrainingCurves(selectedExp)
+      setCurvesData(data)
+      setCurvesLoaded(true)
+    } catch (e: any) {
+      setCurvesError(e?.response?.data?.detail || '加载失败')
+      setCurvesLoaded(true)
+    } finally {
+      setLoadingCurves(false)
+    }
+  }, [selectedExp])
+
   // 数据文件变化时自动加载
   useEffect(() => {
     if (selectedDataFile) loadDistributions()
@@ -162,8 +187,16 @@ export default function DataVisualization() {
     if (selectedExp) {
       loadScatter()
       loadImportance()
+      loadTrainingCurves()
     }
   }, [selectedExp])
+
+  const tabs = [
+    { key: 'distribution', label: '数据分布', icon: BarChart3 },
+    { key: 'importance', label: '特征重要性', icon: Layers },
+    { key: 'evaluation', label: '评估', icon: TrendingUp },
+    { key: 'training', label: '训练曲线', icon: Activity },
+  ] as const
 
   const dataFileOptions = dataFiles.map((f) => ({ value: String(f.id), label: f.filename }))
   const expOptions = experiments.map((e) => ({ value: String(e.id), label: e.name }))
@@ -207,80 +240,141 @@ export default function DataVisualization() {
         </div>
       </Card>
 
-      {/* Summary Stats */}
-      {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <Card className="text-center py-4">
-            <p className="text-2xl font-semibold text-slate-900">{summary.rows.toLocaleString()}</p>
-            <p className="text-sm text-slate-500 mt-1">样本数</p>
-          </Card>
-          <Card className="text-center py-4">
-            <p className="text-2xl font-semibold text-slate-900">{summary.columns}</p>
-            <p className="text-sm text-slate-500 mt-1">特征数</p>
-          </Card>
-          <Card className="text-center py-4">
-            <p className="text-2xl font-semibold text-slate-900">{summary.numeric_features}</p>
-            <p className="text-sm text-slate-500 mt-1">数值特征</p>
-          </Card>
+      {/* Tab Navigation */}
+      <Card>
+        <div className="flex gap-1 overflow-x-auto">
+          {tabs.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setSelectedTab(key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                selectedTab === key
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+      </Card>
 
-      {/* Charts Row 1: Distribution + Scatter */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Histogram */}
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-primary-600" />
-              <h2 className="text-lg font-semibold text-slate-900">数据分布</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select
-                label="类型"
-                options={[
-                  { value: 'histogram', label: '直方图' },
-                  { value: 'boxplot', label: '箱线图' },
-                ]}
-                value={plotType}
-                onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot')}
-                className="w-28"
-              />
-              <Select
-                label="特征"
-                options={featureOptions}
-                value={selectedFeature}
-                onChange={(e) => setSelectedFeature(e.target.value)}
-                className="w-40"
-              />
-            </div>
-          </div>
-
-          {distError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
-              <AlertCircle className="w-4 h-4" />
-              {distError}
+      {/* Tab Content */}
+      {selectedTab === 'distribution' && (
+        <>
+          {/* Summary Stats */}
+          {summary && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <Card className="text-center py-4">
+                <p className="text-2xl font-semibold text-slate-900">{summary.rows.toLocaleString()}</p>
+                <p className="text-sm text-slate-500 mt-1">样本数</p>
+              </Card>
+              <Card className="text-center py-4">
+                <p className="text-2xl font-semibold text-slate-900">{summary.columns}</p>
+                <p className="text-sm text-slate-500 mt-1">特征数</p>
+              </Card>
+              <Card className="text-center py-4">
+                <p className="text-2xl font-semibold text-slate-900">{summary.numeric_features}</p>
+                <p className="text-sm text-slate-500 mt-1">数值特征</p>
+              </Card>
             </div>
           )}
 
-          <HistogramChart
-            data={distData}
-            loading={loadingDist || !distLoaded}
-            emptyText={selectedDataFile ? '暂无分布数据' : '请先选择数据集'}
-            color="#6366f1"
-            height={280}
+          {/* Histogram */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary-600" />
+                <h2 className="text-lg font-semibold text-slate-900">数据分布</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select
+                  label="类型"
+                  options={[
+                    { value: 'histogram', label: '直方图' },
+                    { value: 'boxplot', label: '箱线图' },
+                  ]}
+                  value={plotType}
+                  onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot')}
+                  className="w-28"
+                />
+                <Select
+                  label="特征"
+                  options={featureOptions}
+                  value={selectedFeature}
+                  onChange={(e) => setSelectedFeature(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+            </div>
+
+            {distError && (
+              <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
+                <AlertCircle className="w-4 h-4" />
+                {distError}
+              </div>
+            )}
+
+            <HistogramChart
+              data={distData}
+              loading={loadingDist || !distLoaded}
+              emptyText={selectedDataFile ? '暂无分布数据' : '请先选择数据集'}
+              color="#6366f1"
+              height={280}
+            />
+
+            {distLoaded && distData.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-sm text-slate-500">
+                  特征 <span className="font-medium text-slate-700">{selectedFeature}</span> 的分布
+                  · 共 <span className="font-medium text-slate-700">{distData.reduce((s, d) => s + d.count, 0).toLocaleString()}</span> 条记录
+                </p>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {selectedTab === 'importance' && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-violet-600" />
+              <h2 className="text-lg font-semibold text-slate-900">特征重要性</h2>
+            </div>
+            <Button variant="ghost" size="sm" onClick={loadImportance} disabled={!selectedExp || loadingImportance}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              刷新
+            </Button>
+          </div>
+
+          {impError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
+              <AlertCircle className="w-4 h-4" />
+              {impError}
+            </div>
+          )}
+
+          <FeatureImportanceChart
+            data={importanceData}
+            loading={loadingImportance || !importanceLoaded}
+            emptyText={selectedExp ? '该实验无特征重要性数据' : '请先选择实验'}
+            color="#8b5cf6"
+            height={320}
           />
 
-          {distLoaded && distData.length > 0 && (
+          {importanceLoaded && importanceData.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <p className="text-sm text-slate-500">
-                特征 <span className="font-medium text-slate-700">{selectedFeature}</span> 的分布
-                · 共 <span className="font-medium text-slate-700">{distData.reduce((s, d) => s + d.count, 0).toLocaleString()}</span> 条记录
+                基于当前实验模型 · 共 <span className="font-medium text-slate-700">{importanceData.length}</span> 个特征
               </p>
             </div>
           )}
         </Card>
+      )}
 
-        {/* Scatter (Prediction) */}
+      {selectedTab === 'evaluation' && (
         <Card>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -308,44 +402,43 @@ export default function DataVisualization() {
             </div>
           )}
         </Card>
-      </div>
+      )}
 
-      {/* Feature Importance */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-violet-600" />
-            <h2 className="text-lg font-semibold text-slate-900">特征重要性</h2>
+      {selectedTab === 'training' && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-amber-600" />
+              <h2 className="text-lg font-semibold text-slate-900">训练曲线</h2>
+            </div>
+            <Button variant="ghost" size="sm" onClick={loadTrainingCurves} disabled={!selectedExp || loadingCurves}>
+              <RefreshCw className="w-4 h-4 mr-1" />
+              刷新
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={loadImportance} disabled={!selectedExp || loadingImportance}>
-            <RefreshCw className="w-4 h-4 mr-1" />
-            刷新
-          </Button>
-        </div>
 
-        {impError && (
-          <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
-            <AlertCircle className="w-4 h-4" />
-            {impError}
-          </div>
-        )}
+          {curvesError && (
+            <div className="flex items-center gap-2 text-red-500 text-sm mb-3">
+              <AlertCircle className="w-4 h-4" />
+              {curvesError}
+            </div>
+          )}
 
-        <FeatureImportanceChart
-          data={importanceData}
-          loading={loadingImportance || !importanceLoaded}
-          emptyText={selectedExp ? '该实验无特征重要性数据' : '请先选择实验'}
-          color="#8b5cf6"
-          height={320}
-        />
+          <TrainingCurvesChart
+            data={curvesData ? { epochs: curvesData.epochs, curves: curvesData.curves } : { epochs: [], curves: [] }}
+            loading={loadingCurves || !curvesLoaded}
+            height={320}
+          />
 
-        {importanceLoaded && importanceData.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <p className="text-sm text-slate-500">
-              基于当前实验模型 · 共 <span className="font-medium text-slate-700">{importanceData.length}</span> 个特征
-            </p>
-          </div>
-        )}
-      </Card>
+          {curvesLoaded && curvesData && curvesData.curves.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-sm text-slate-500">
+                基于实验 <span className="font-medium text-slate-700">#{selectedExp}</span> · 共 <span className="font-medium text-slate-700">{curvesData.epochs.length}</span> 个 Epoch · <span className="font-medium text-slate-700">{curvesData.curves.length}</span> 条曲线
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   )
 }

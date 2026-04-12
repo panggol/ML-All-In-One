@@ -12,7 +12,14 @@ from sqlalchemy.orm import Session
 from api.database import User, get_db
 
 # 配置
-SECRET_KEY = "your-secret-key-change-in-production"  # 生产环境从环境变量读取
+import os
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "JWT_SECRET_KEY environment variable is required. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
@@ -83,7 +90,7 @@ async def get_current_user(
         raise credentials_exception
     
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="用户已被禁用")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用")
     
     return user
 
@@ -91,5 +98,5 @@ async def get_current_user(
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """获取当前活跃用户"""
     if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="用户已被禁用")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="用户已被禁用")
     return current_user

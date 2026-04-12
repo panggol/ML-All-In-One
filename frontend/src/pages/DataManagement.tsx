@@ -217,23 +217,7 @@ export default function DataManagement() {
   // 导出文件
   const handleExport = async (file: DataFile) => {
     try {
-      const preview = await dataApi.preview(file.id)
-      const data = preview as PreviewResponse
-      
-      if (!data.rows || data.rows.length === 0) {
-        setError('数据集为空')
-        return
-      }
-      
-      // 转换为 CSV
-      const header = data.columns.join(',')
-      const rows = data.rows.map(row => 
-        (row as unknown[]).map(v => `"${String(v ?? '')}"`).join(',')
-      )
-      const csv = [header, ...rows].join('\n')
-      
-      // 下载
-      const blob = new Blob([csv], { type: 'text/csv' })
+      const blob = await dataApi.export(file.id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

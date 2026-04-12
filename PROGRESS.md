@@ -1,6 +1,6 @@
 # 🤖 ML All In One - 项目进度
 
-_最后更新：2026-04-11_
+_最后更新：2026-04-12 15:20_
 
 ## 📊 模块进度
 
@@ -11,9 +11,21 @@ _最后更新：2026-04-11_
 | 用户认证 | 1/1 | ✅ 完成 | auth.py + AuthPage.tsx |
 | 前端界面 | 10/10 | ✅ 完成 | 全部 Tab 页面已实现 |
 | Docker 部署 | 1/1 | ✅ 完成 | docker-compose.yml |
-| 数据管理 API | 1/1 | ⚠️ 有缺陷 | 13 个测试失败（权限相关） |
+| 数据管理 API | 1/1 | ✅ 完成 | 16 tests passed（conftest.py JWT_SECRET_KEY 已补上） |
 | 系统监控 | 1/1 | ✅ 完成 | Monitor.tsx + monitor API |
 | 实验对比 | 1/1 | ✅ 完成 | Experiments.tsx + experiment_comparison |
+| 数据预处理 | 1/1 | ✅ 完成 | preprocessing API + 安全修复（11 tests）；2026-04-11 完成；4轮迭代；P0路径遍历修复 |
+| 模型推理 | 1/1 | ✅ 完成 | Inference.tsx + models API；3 P0安全修复；18 tests；2026-04-11 完成 |
+| 训练管理 | 1/1 | ✅ 完成 | train API + Training.tsx；3轮Harness迭代；P0特征列空列表修复+model_name白名单+task_type枚举+非增量停止状态Bug修复；16 tests |
+| AutoML Tab | 1/1 | ✅ 完成 | automl.py + AutoML.tsx + mlkit.automl；42 tests；2026-04-11 完成；3种搜索策略；Constitution v1.0 |
+| 全模型测试覆盖 | 1/1 | ✅ 完成 | XGB/LGBM/LogisticRegression/MLP(PyTorch)；20 tests；1轮通过；2026-04-11 完成 |
+| 数据可视化集成 | 1/1 | ✅ 完成 | Task 4 Harness：pytest 27/27 + 审计7/7 + Constitution + 需求对照 + 集成 + UI交互全部通过；建议后续补充viz.spec.ts；2026-04-11 |
+| 未测模型覆盖 | 1/1 | ✅ 完成 | Task 5 完整Harness通过：QA 6/6 PASS + 回归349 PASS + Auditor Constitution合规审查通过；Orchestrator架构正确（spawn了真实worker）；2026-04-11 |
+| 回归模型训练 | 1/1 | ✅ 完成 | train API Regressor白名单扩展 + Training.tsx动态切换；5 tests；1轮通过；2026-04-11 完成 |
+
+| 日志系统 | 1/1 | ✅ 完成 | Logs.tsx + logs.py；18 tests；2轮迭代；WebSocket URL环境变量修复；2026-04-12 完成 |
+
+**✅ 全量测试：397 passed, 1 skipped（2026-04-12）**
 
 ## 📁 项目结构
 
@@ -23,6 +35,8 @@ ml-all-in-one/
 │   ├── config/             # 配置系统
 │   ├── registry/           # 注册机制
 │   ├── model/              # 模型基类
+│   │   ├── __init__.py    # ✅ create_model（含MLPClassifier）
+│   │   └── pytorch_model.py # ✅ PyTorch MLP sklearn风格封装
 │   ├── data/               # 数据处理
 │   ├── hooks/              # 生命周期
 │   ├── runner/             # 训练运行器
@@ -32,7 +46,7 @@ ml-all-in-one/
 │   ├── database.py         # 数据库
 │   └── routes/
 │       ├── auth.py         # ✅ 用户认证
-│       ├── train.py        # ✅ 模型训练
+│       ├── train.py        # ✅ 模型训练（+pytorch类型+MLPClassifier）
 │       ├── experiments.py  # ✅ 实验管理
 │       ├── automl.py       # ✅ AutoML
 │       ├── preprocessing.py # ✅ 数据预处理
@@ -57,17 +71,6 @@ ml-all-in-one/
 ├── docker-compose.yml       # ✅ Docker 部署
 ├── Dockerfile               # ✅ API 镜像
 └── tests/                   # 测试套件
+    ├── test_train_api.py    # ✅ 16 tests（RandomForest等）
+    └── test_models_training.py # ✅ 4 tests（XGB/LGBM/Logistic/MLP）
 ```
-
-## 🔴 待处理问题
-
-### BUG-007 数据管理 API 权限问题（13个测试失败）
-- **严重度：** 🔴 高
-- **发现日期：** 2026-04-11
-- **问题：** `test_data_management_api.py` 13个测试失败（list/preview/stats/delete/export）
-- **影响：** data_management_tab 功能不可靠
-- **状态：** ⬜ 待修复
-
----
-
-*最后更新: 2026-04-11*

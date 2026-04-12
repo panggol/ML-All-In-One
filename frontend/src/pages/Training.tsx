@@ -7,11 +7,17 @@ import Input from '../components/Input'
 import ProgressBar from '../components/ProgressBar'
 import { dataApi, trainApi, TrainJob, TrainStatus, MetricsCurve } from '../api'
 
-const MODEL_OPTIONS = [
+const CLASSIFIER_MODELS = [
   { value: 'RandomForestClassifier', label: 'RandomForest' },
   { value: 'XGBClassifier', label: 'XGBoost' },
   { value: 'LGBMClassifier', label: 'LightGBM' },
   { value: 'LogisticRegression', label: 'LogisticRegression' },
+]
+
+const REGRESSOR_MODELS = [
+  { value: 'RandomForestRegressor', label: 'RandomForest' },
+  { value: 'XGBRegressor', label: 'XGBoost' },
+  { value: 'LGBMRegressor', label: 'LightGBM' },
 ]
 
 const TASK_OPTIONS = [
@@ -83,6 +89,16 @@ export default function Training() {
       loadFileColumns(selectedFile)
     }
   }, [selectedFile])
+
+  // 动态模型列表：按 taskType 切换
+  const currentModelOptions = taskType === 'regression' ? REGRESSOR_MODELS : CLASSIFIER_MODELS
+
+  // taskType 切换时，若当前选中模型不在新列表中，自动清空
+  useEffect(() => {
+    if (selectedModel && !currentModelOptions.find(m => m.value === selectedModel)) {
+      setSelectedModel(null)
+    }
+  }, [taskType, currentModelOptions, selectedModel])
 
   // target 列变化时，重置特征选择
   useEffect(() => {
@@ -247,9 +263,16 @@ export default function Training() {
     }))
   }
 
-  const TrainingCurves = ({ metrics_curve }: { metrics_curve: MetricsCurve }) => {
-    const [activeMetric, setActiveMetric] = useState<'loss' | 'accuracy'>('loss')
+  const TrainingCurves = ({ metrics_curve, taskType }: { metrics_curve: MetricsCurve; taskType: 'classification' | 'regression' }) => {
+    const [activeMetric, setActiveMetric] = useState<'loss' | 'accuracy'>(
+      taskType === 'regression' ? 'loss' : 'accuracy'
+    )
     const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set())
+
+    // taskType 切换时重置 Tab
+    useEffect(() => {
+      setActiveMetric(taskType === 'regression' ? 'loss' : 'accuracy')
+    }, [taskType])
 
     const chartData = useMemo(() => buildChartData(metrics_curve, activeMetric), [metrics_curve, activeMetric])
 
@@ -394,12 +417,12 @@ export default function Training() {
 
         {/* 已完成 - 展示曲线 */}
         {status === 'running' && curveExpanded && metricsCurve && (
-          <TrainingCurves metrics_curve={metricsCurve} />
+          <TrainingCurves metrics_curve={metricsCurve} taskType={taskType} />
         )}
 
         {/* 训练刚完成且有曲线数据 */}
         {status === 'completed' && metricsCurve && (
-          <TrainingCurves metrics_curve={metricsCurve} />
+          <TrainingCurves metrics_curve={metricsCurve} taskType={taskType} />
         )}
       </Card>
     )
@@ -612,7 +635,7 @@ export default function Training() {
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-3">选择模型</label>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {MODEL_OPTIONS.map(model => (
+            {currentModelOptions.map(model => (
               <button
                 key={model.value}
                 onClick={() => setSelectedModel(model.value)}
@@ -663,17 +686,46 @@ export default function Training() {
                     <p className="text-2xl font-semibold text-slate-900">{currentJob.model_name}</p>
                     <p className="text-sm text-slate-500">模型</p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-semibold text-primary-600">
-                      {currentJob.metrics?.accuracy ? `${(currentJob.metrics.accuracy * 100).toFixed(1)}%` : '—'}
-                    </p>
-                    <p className="text-sm text-slate-500">准确率</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-semibold text-slate-900">{progress}%</p>
-                    <p className="text-sm text-slate-500">进度</p>
-                  </div>
+                  {taskType === 'regression' ? (
+                    <>
+                      <div className="text-center">
+                        <p className="text-2xl font-semibold text-primary-600">
+                          {currentJob.metrics?.mse != null ? currentJob.metrics.mse.toFixed(4) : '—'}
+                        </p>
+                        <p className="text-sm text-slate-500">MSE</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-semibold text-primary-600">
+                          {currentJob.metrics?.mae != null ? currentJob.metrics.mae.toFixed(4) : '—'}
+                        </p>
+                        <p className="text-sm text-slate-500">MAE</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-center">
+                        <p className="text-2xl font-semibold text-primary-600">
+                          {currentJob.metrics?.accuracy ? `${(currentJob.metrics.accuracy * 100).toFixed(1)}%` : '—'}
+                        </p>
+                        <p className="text-sm text-slate-500">准确率</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-semibold text-slate-900">{progress}%</p>
+                        <p className="text-sm text-slate-500">进度</p>
+                      </div>
+                    </>
+                  )}
                 </div>
+                {taskType === 'regression' && (
+                  <div className="grid grid-cols-1 gap-4 pt-4 border-t border-slate-100">
+                    <div className="text-center">
+                      <p className="text-2xl font-semibold text-emerald-600">
+                        {currentJob.metrics?.r2 != null ? currentJob.metrics.r2.toFixed(4) : '—'}
+                      </p>
+                      <p className="text-sm text-slate-500">R²</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           )}

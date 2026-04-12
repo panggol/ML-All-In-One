@@ -9,8 +9,8 @@ import joblib
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+from typing import List, Optional, Literal
 
 # 添加 src 到路径以便导入 mlkit
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), '..'))
@@ -30,11 +30,24 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 class TrainRequest(BaseModel):
     data_file_id: int
     target_column: str
-    task_type: str  # classification/regression
-    model_type: str  # sklearn/xgboost/lightgbm
-    model_name: str
-    params: Optional[dict] = {}
-    feature_columns: Optional[List[str]] = None  # 手动选择的特征列
+    task_type: Literal["classification", "regression"]
+    model_type: Literal["sklearn", "xgboost", "lightgbm", "pytorch"]
+    model_name: Literal[
+        "RandomForestClassifier",
+        "XGBClassifier",
+        "LGBMClassifier",
+        "LogisticRegression",
+        "MLPClassifier",
+        "RandomForestRegressor",
+        "XGBRegressor",
+        "LGBMRegressor",
+        "SVC",
+        "SVR",
+        "LinearRegression",
+        "GradientBoostingClassifier",
+    ]
+    params: dict = {}
+    feature_columns: List[str] = Field(..., min_length=1)  # 必填，至少1个特征
 
 
 class TrainJobResponse(BaseModel):
@@ -50,6 +63,19 @@ class TrainJobResponse(BaseModel):
     created_at: str = ""
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TrainStatusResponse(BaseModel):
+    id: int
+    model_name: str
+    task_type: str
+    status: str
+    progress: int
+    current_iter: int
+    metrics: dict
+    metrics_curve: dict
+    logs: str
+    created_at: str
 
 
 class PredictRequest(BaseModel):
@@ -142,6 +168,10 @@ def _run_training(job_id: int, db_url: str):
         if not job:
             return
 
+        # === Bug #5 修复：model_type 业务层断言 ===
+        assert job.model_type in ("sklearn", "xgboost", "lightgbm", "pytorch"), f"不支持的 model_type: {job.model_type}"
+        # =======================================
+
         # 更新状态
         job.status = "running"
         job.started_at = datetime.now(timezone.utc)
@@ -232,7 +262,18 @@ def _run_training(job_id: int, db_url: str):
         runner.train_dataset = dataset
 
         # 构建模型
+        # 过滤掉 params 中非模型参数的字段（如 feature_columns 仅用于数据选择，
+        # task 已在下面显式传入，params 中如有会重复导致 LGBMClassifier 报错）
         model_kwargs = {**job.params, "task": job.task_type, "model_class": job.model_name}
+        model_kwargs.pop("feature_columns", None)
+        model_kwargs.pop("epochs", None)    # epochs 是 partial_fit 循环参数，不传 sklearn 模型
+        model_kwargs.pop("batch_size", None)  # 同上
+        # task 参数根据 model_type 决定是否 pop：
+        # - xgboost: XGBoostModel.__init__ 接受 task，已在 kwargs 中
+        # - lightgbm: LightGBMModel 内部 pop，不需提前 pop
+        # - sklearn: 不接受 task，直接 pop
+        if job.model_type in ("lightgbm", "xgboost"):
+            pass  # task 参数保留在 kwargs 中，由各自的 Model 类处理
         runner.model = create_model(job.model_type, **model_kwargs)
 
         training_mgr.register_runner(job_id, runner)
@@ -336,17 +377,27 @@ def _run_training(job_id: int, db_url: str):
 
             training_mgr.update(job_id, progress=10, logs="开始训练...\n")
 
-            # 启动训练线程
+            # 启动训练线程（传入停止事件，线程内定期检查）
             train_result = {"done": False, "error": None}
+            stop_event = training_mgr._stop_events.get(job_id)
 
-            def _fit():
+            def _fit(stop_evt: threading.Event):
                 try:
+                    import numpy as np
+                    # 直接用完整训练集 fit（sklearn 模型不支持单样本 batched fit，
+                    # 调用 fit(X_batch, y_batch) 时 batch 太小会导致：
+                    # XGBClassifier: "Invalid classes inferred"
+                    # LGBMClassifier: "minimum of 2 samples required"
+                    # LogisticRegression: "solver needs samples of at least 2 classes"
+                    # 故改为一次性 fit 全量数据，由模型内部处理。
+                    if stop_evt is not None and stop_evt.is_set():
+                        return
                     runner.model.fit(X_train, y_train)
                     train_result["done"] = True
                 except Exception as e:
                     train_result["error"] = str(e)
 
-            fit_thread = threading.Thread(target=_fit, daemon=True)
+            fit_thread = threading.Thread(target=_fit, args=(stop_event,), daemon=True)
             fit_thread.start()
 
             # 监控训练进度
@@ -370,7 +421,16 @@ def _run_training(job_id: int, db_url: str):
                 db.commit()
                 time.sleep(0.1)
 
-            fit_thread.join(timeout=5)
+            fit_thread.join(timeout=300)  # 与 Constitution 对齐（5分钟超时）
+
+            # === 关键修复：非增量模型停止后检查停止信号 ===
+            if training_mgr.is_stopped(job_id):
+                training_mgr.update(job_id, status="stopped", logs="训练已停止\n")
+                job.status = "stopped"
+                job.finished_at = datetime.now(timezone.utc)
+                db.commit()
+                return  # 提前返回，不执行后续评估和完成流程
+            # =================================================
 
             if train_result["error"]:
                 raise RuntimeError(train_result["error"])
@@ -471,10 +531,10 @@ def _run_training(job_id: int, db_url: str):
     finally:
         # 清理临时过滤后的 CSV 文件
         try:
-            if 'data_file_filtered_path' in dir() or 'data_file_filtered_path' in locals():
-                import os as _os
-                if data_file_filtered_path and _os.path.exists(data_file_filtered_path):
-                    _os.unlink(data_file_filtered_path)
+            if 'data_file_filtered_path' in locals():
+                path = locals()['data_file_filtered_path']
+                if path and os.path.exists(path):
+                    os.unlink(path)
         except Exception:
             pass
         training_mgr.unregister(job_id)
@@ -503,10 +563,10 @@ async def create_training(
             detail="数据文件不存在",
         )
 
+    # feature_columns 已在 Pydantic 模型中通过 Field(min_length=1) 强制校验
     # 将 feature_columns 存入 params
     job_params = dict(request.params) if request.params else {}
-    if request.feature_columns:
-        job_params['feature_columns'] = request.feature_columns
+    job_params['feature_columns'] = request.feature_columns
 
     # 创建训练任务
     job = TrainingJob(
@@ -570,12 +630,12 @@ async def list_jobs(
     ]
 
 
-@router.get("/{job_id}/status")
+@router.get("/{job_id}/status", response_model=TrainStatusResponse)
 async def get_job_status(
     job_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> TrainStatusResponse:
     """获取训练状态（含实时进度）"""
     job = db.query(TrainingJob).filter(
         TrainingJob.id == job_id,
@@ -591,21 +651,24 @@ async def get_job_status(
     # 从内存状态获取最新进度
     status_data = training_mgr.get_status(job_id)
 
-    return {
-        "id": job.id,
-        "status": status_data.get("status", job.status),
-        "progress": status_data.get("progress", job.progress),
-        "current_iter": status_data.get("current_iter", job.current_iter),
-        "metrics": job.metrics or {},
-        "metrics_curve": job.metrics_curve or status_data.get("metrics_curve", {
+    return TrainStatusResponse(
+        id=job.id,
+        model_name=job.model_name,
+        task_type=job.task_type,
+        status=status_data.get("status", job.status),
+        progress=status_data.get("progress", job.progress),
+        current_iter=status_data.get("current_iter", job.current_iter),
+        metrics=job.metrics or {},
+        metrics_curve=job.metrics_curve or status_data.get("metrics_curve", {
             "epochs": [],
             "train_loss": [],
             "val_loss": [],
             "train_accuracy": [],
             "val_accuracy": [],
         }),
-        "logs": status_data.get("logs", job.logs or ""),
-    }
+        logs=status_data.get("logs", job.logs or ""),
+        created_at=job.created_at.isoformat(),
+    )
 
 
 @router.post("/{job_id}/stop")

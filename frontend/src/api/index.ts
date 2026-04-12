@@ -4,6 +4,7 @@ export { dataApi } from './data'
 export { trainApi } from './train'
 export { experimentApi } from './experiments'
 export { vizApi } from './viz'
+export { logsApi } from './logs'
 
 export type { LoginRequest, RegisterRequest, AuthResponse, User } from './auth'
 export type { DataFile } from './data'
@@ -18,6 +19,7 @@ export { automlApi } from './automl'
 export { preprocessingApi, DEFAULT_STEPS } from './preprocessing'
 export { modelsApi } from './models'
 export type { ModelInfo, InferenceResult } from './models'
+export type { LogEntry, LogListResponse, LogsFilter } from './logs'
 export type {
   AutoMLRequest, AutoMLStatus, AutoMLReport, SearchSpaceItem, TopModel
 } from './automl'

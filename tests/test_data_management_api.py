@@ -393,11 +393,13 @@ class TestDataDelete:
 
 
 class TestDataExport:
-    """Export functionality tests (frontend export uses /preview)."""
+    """Export functionality tests — full CSV download via /export endpoint."""
 
-    def test_export_data_matches_preview(self, auth_client, db_session, test_user):
-        """Export data matches preview interface."""
-        csv_content = "col1,col2,col3\n1,2,3\n4,5,6\n7,8,9"
+    def test_export_returns_full_file(self, auth_client, db_session, test_user):
+        """导出端点返回完整文件，不只是前50行。"""
+        # 创建一个超过50行的 CSV 文件
+        rows = ["col1,col2,col3"] + [f"{i},{i*2},{i*3}" for i in range(1, 101)]
+        csv_content = "\n".join(rows)
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
             tmp.write(csv_content)
@@ -405,23 +407,57 @@ class TestDataExport:
 
         f = DataFile(
             user_id=test_user.id,
-            filename="export_test.csv",
+            filename="large_export.csv",
             filepath=tmp_path,
             size=os.path.getsize(tmp_path),
-            rows=3,
+            rows=100,
             columns=["col1", "col2", "col3"],
         )
         db_session.add(f)
         db_session.commit()
         db_session.refresh(f)
 
-        response = auth_client.get(f"/api/data/{f.id}/preview")
+        response = auth_client.get(f"/api/data/{f.id}/export")
         assert response.status_code == 200
-        data = response.json()
+        assert "text/csv" in response.headers["content-type"]
+        assert "content-disposition" in response.headers
 
-        header = ",".join(data["columns"])
-        assert header == "col1,col2,col3"
-        assert len(data["rows"]) == 3
+        # 验证返回的是完整 CSV（100行数据 + 1行 header = 101行）
+        content = response.text
+        lines = content.strip().split("\n")
+        assert len(lines) == 101, f"Expected 101 lines, got {len(lines)}"
+
+        os.unlink(tmp_path)
+
+    def test_export_not_found(self, auth_client):
+        """导出不存在的文件返回404。"""
+        response = auth_client.get("/api/data/99999/export")
+        assert response.status_code == 404
+
+    def test_export_other_user_file_rejected(self, auth_client, db_session, test_user):
+        """无法导出其他用户的文件。"""
+        other_user = User(username="other_export", email="other_export@example.com", password_hash="x")
+        db_session.add(other_user)
+        db_session.commit()
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
+            tmp.write("col1,col2\n1,2\n3,4\n")
+            tmp_path = tmp.name
+
+        f = DataFile(
+            user_id=other_user.id,
+            filename="other_export.csv",
+            filepath=tmp_path,
+            size=os.path.getsize(tmp_path),
+            rows=2,
+            columns=["col1", "col2"],
+        )
+        db_session.add(f)
+        db_session.commit()
+        db_session.refresh(f)
+
+        response = auth_client.get(f"/api/data/{f.id}/export")
+        assert response.status_code == 404  # 隔离：查不到 own 的文件
 
         os.unlink(tmp_path)
 
@@ -442,7 +478,9 @@ ACCEPTANCE_CRITERIA = [
     ("Delete success", "test_delete_success"),
     ("Delete non-existent file", "test_delete_not_found"),
     ("Cannot delete other user's file", "test_delete_other_user_file_rejected"),
-    ("Export data consistency", "test_export_data_matches_preview"),
+    ("Export returns full file (>50 rows)", "test_export_returns_full_file"),
+    ("Export non-existent file", "test_export_not_found"),
+    ("Cannot export other user's file", "test_export_other_user_file_rejected"),
 ]
 
 

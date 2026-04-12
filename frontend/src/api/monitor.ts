@@ -99,37 +99,37 @@ export const monitorApi = {
    * 获取系统监控概览数据
    * 实时数据，每次请求时实时采集
    */
-  getOverview: () => api.get<MonitorOverviewResponse>('/api/monitor/overview'),
+  getOverview: () => api.get<MonitorOverviewResponse>('/monitor/overview'),
 
   /**
    * 获取 CPU 详情
    */
-  getCPU: () => api.get<CPUInfo>('/api/monitor/cpu'),
+  getCPU: () => api.get<CPUInfo>('/monitor/cpu'),
 
   /**
    * 获取内存详情
    */
-  getMemory: () => api.get<MemoryInfo>('/api/monitor/memory'),
+  getMemory: () => api.get<MemoryInfo>('/monitor/memory'),
 
   /**
    * 获取 GPU 详情
    */
-  getGPU: () => api.get<GPUInfo>('/api/monitor/gpu'),
+  getGPU: () => api.get<GPUInfo>('/monitor/gpu'),
 
   /**
    * 获取磁盘详情
    */
-  getDisk: () => api.get<DiskInfo>('/api/monitor/disk'),
+  getDisk: () => api.get<DiskInfo>('/monitor/disk'),
 
   /**
    * 获取网络详情
    */
-  getNetwork: () => api.get<NetworkInfo>('/api/monitor/network'),
+  getNetwork: () => api.get<NetworkInfo>('/monitor/network'),
 
   /**
    * 获取训练任务统计
    */
-  getJobs: () => api.get<JobStats>('/api/monitor/jobs'),
+  getJobs: () => api.get<JobStats>('/monitor/jobs'),
 
   /**
    * 获取历史监控数据
@@ -143,5 +143,5 @@ export const monitorApi = {
     from: string
     to: string
     interval?: string
-  }) => api.get<MonitorHistoryResponse>('/api/monitor/history', { params }),
+  }) => api.get<MonitorHistoryResponse>('/monitor/history', { params }),
 }

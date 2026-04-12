@@ -4,7 +4,7 @@
 import joblib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional
 
 from api.database import TrainedModel, User, get_db
@@ -14,18 +14,25 @@ router = APIRouter()
 
 # ============ Pydantic 模型 ============
 
+def _extract_task_type(model: TrainedModel) -> Optional[str]:
+    # task_type 可能存储在 config JSON 中
+    cfg = model.config if hasattr(model, 'config') else {}
+    return cfg.get("task_type") if isinstance(cfg, dict) else None
+
+
 class ModelResponse(BaseModel):
     id: int
     name: str
     model_type: str
+    task_type: Optional[str] = None
     metrics: dict
     created_at: str
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
 class PredictRequest(BaseModel):
-    data: List[dict]
+    data: List[dict] = Field(min_length=1, description="输入数据，必须是非空数组")
 
 
 @router.get("/", response_model=List[ModelResponse])
@@ -43,6 +50,7 @@ async def list_models(
             id=model.id,
             name=model.name,
             model_type=model.model_type,
+            task_type=_extract_task_type(model),
             metrics=model.metrics,
             created_at=model.created_at.isoformat()
         )
@@ -69,6 +77,7 @@ async def get_model(
         id=model.id,
         name=model.name,
         model_type=model.model_type,
+        task_type=_extract_task_type(model),
         metrics=model.metrics,
         created_at=model.created_at.isoformat()
     )
@@ -93,8 +102,8 @@ async def predict(
     # 加载模型
     try:
         clf = joblib.load(model.model_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"加载模型失败: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="模型加载失败，请联系管理员")
     
     # 预测
     import pandas as pd
@@ -102,11 +111,12 @@ async def predict(
     predictions = clf.predict(df)
     probabilities = None
     
-    if hasattr(clf, 'predict_proba'):
+    if hasattr(clf, "predict_proba"):
         try:
             probabilities = clf.predict_proba(df).tolist()
-        except:
-            pass
+        except Exception:
+            # 某些模型 predict_proba 可调用但实际运行时出错，静默降级
+            probabilities = None
     
     return {
         "predictions": predictions.tolist(),
