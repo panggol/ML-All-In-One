@@ -202,7 +202,6 @@ export default function AutoML() {
 
   const dataFileOptions = dataFiles.map(f => ({ value: String(f.id), label: f.filename }))
   const targetOptions = selectedFile?.columns.map(c => ({ value: c, label: c })) || []
-  const selectedTarget = targetOptions[0]?.value || ''
 
   return (
     <div className="space-y-8">
@@ -237,12 +236,8 @@ export default function AutoML() {
             <Select
               label="目标列"
               options={targetOptions}
-              value={selectedTarget}
-              onChange={_e => {
-                setSearchSpace(prev => prev.map(s =>
-                  s.name === 'target' ? { ...s } : s
-                ))
-              }}
+              value={targetColumn}
+              onChange={e => setTargetColumn(e.target.value)}
             />
           </div>
 
