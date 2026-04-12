@@ -608,7 +608,7 @@ export default function DataManagement() {
                     ))}
                   </div>
                 </div>
-              ) : statsData === null && error ? (
+              ) : error ? (
                 <div className="text-center py-12">
                   <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
                   <p className="font-medium text-slate-700 mb-1">数据加载失败</p>
