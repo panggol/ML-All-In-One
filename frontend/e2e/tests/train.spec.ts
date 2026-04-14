@@ -12,7 +12,7 @@ import * as fs from 'fs'
  * - 训练完成后查看指标
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 function createTempCSV(): string {
   const content = [
@@ -34,7 +34,7 @@ function createTempCSV(): string {
 }
 
 async function loginAsTestUser(page: any, username: string) {
-  await page.goto(`${BASE_URL}/auth`)
+  await page.goto(`${BASE_URL}/login`)
   const randomUser = `${username}_${Date.now()}`
 
   await page.getByRole('tab', { name: /注册|register/i }).click()
@@ -66,7 +66,7 @@ test.describe('训练创建和状态查询', () => {
 
   test('未登录时访问训练页应跳转登录页', async ({ page }) => {
     await page.goto(`${BASE_URL}/training`)
-    await expect(page).toHaveURL(/\/auth/, { timeout: 5000 })
+    await expect(page).toHaveURL(/\/login/, { timeout: 5000 })
   })
 
   test('训练页面加载成功且关键元素可见', async ({ page }) => {

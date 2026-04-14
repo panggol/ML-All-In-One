@@ -10,19 +10,23 @@ import { test, expect } from '@playwright/test'
  * - 禁用/启用用户
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 test.describe('管理员用户管理页面', () => {
 
   test.beforeEach(async ({ page }) => {
+    // 清理会话：确保无残留 token 影响登录
+    await page.context().clearCookies()
+    await page.goto(`${BASE_URL}/login`)
+    await page.waitForLoadState('domcontentloaded')
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
+    await page.waitForLoadState('networkidle')
     // 登录为 admin
-    await page.goto(`${BASE_URL}/auth`)
-    await page.getByPlaceholder('请输入用户名或邮箱').fill('admin')
-    await page.getByPlaceholder('请输入密码').fill('admin123')
-    // 点击登录，等待导航完成
+    await page.locator('input[placeholder*="用户名"]').first().fill('admin')
+    await page.locator('input[type="password"]').first().fill('admin123')
     await Promise.all([
-      page.locator('form').getByRole('button', { name: '登录' }).click(),
-      page.waitForURL(`${BASE_URL}/dashboard`, { timeout: 10000 })
+      page.locator('button[type="submit"]').filter({ hasText: /登录/i }).first().click(),
+      page.waitForURL('**/dashboard**', { timeout: 10000 })
     ])
   })
 

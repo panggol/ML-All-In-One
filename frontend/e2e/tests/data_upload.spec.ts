@@ -12,7 +12,7 @@ import * as path from 'path'
  * - 数据删除
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 // 创建临时 CSV 文件供上传测试使用
 function createTempCSV(): string {

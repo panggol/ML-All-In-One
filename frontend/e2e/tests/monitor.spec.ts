@@ -6,7 +6,7 @@ import * as fs from 'fs'
  * 覆盖：登录、监控页面加载、指标卡片显示、GPU/网络信息、红色阴影修复验证
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 const SCREENSHOT_DIR = '/home/gem/workspace/agent/workspace/ml-all-in-one/frontend/e2e/screenshots'
 
 function ensureScreenshotDir() {
@@ -33,7 +33,7 @@ async function loginAsAdmin(page: Page) {
   const loginBtn = page.locator('button[type="submit"]').filter({ hasText: /登录/i }).first()
   await loginBtn.click()
 
-  await page.waitForURL(url => url.pathname !== '/login', { timeout: 10000 }).catch(() => {
+  await page.waitForURL('**/dashboard**', { timeout: 10000 }).catch(() => {
     console.log('⚠️ Login redirect not detected, current URL:', page.url())
   })
   await page.waitForLoadState('networkidle')

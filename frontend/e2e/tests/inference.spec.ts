@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 const ADMIN_USER = 'admin'
 const ADMIN_PASS = 'admin123'
 const MODEL_NAME = 'RandomForestRegressor_job_23'
@@ -9,7 +9,7 @@ const MODEL_NAME = 'RandomForestRegressor_job_23'
 // 辅助函数：登录
 // ============================================================
 async function doLogin(page: Page) {
-  await page.goto(`${BASE_URL}/auth`)
+  await page.goto(`${BASE_URL}/login`)
   await page.waitForLoadState('networkidle')
 
   const usernameInput = page.locator('input[placeholder="请输入用户名或邮箱"]')

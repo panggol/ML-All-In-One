@@ -4,7 +4,7 @@ import { test, expect, Page, Locator } from '@playwright/test'
  * E2E 测试：登录/注册流程
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000/login'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 // ============================================================
 // 辅助函数：JS 方式设置 React controlled input 的值

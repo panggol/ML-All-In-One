@@ -14,7 +14,7 @@ import * as fs from 'fs'
  * - 截图每个关键步骤
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 const SCREENSHOT_DIR = '/home/gem/workspace/agent/workspace/ml-all-in-one/frontend/e2e/screenshots'
 
 function ensureScreenshotDir() {

@@ -9,7 +9,7 @@ import * as fs from 'fs'
  * - 列名按字母分组展示（分组 Tabs）
  */
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 const SCREENSHOT_DIR = '/home/gem/workspace/agent/workspace/ml-all-in-one/frontend/e2e/screenshots'
 
 function ensureScreenshotDir() {

@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 test.describe('数据可视化页面', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE_URL}/auth`)
+    await page.goto(`${BASE_URL}/login`)
     await page.getByPlaceholder('请输入用户名或邮箱').fill('admin')
     await page.getByPlaceholder('请输入密码').fill('admin123')
     await Promise.all([
