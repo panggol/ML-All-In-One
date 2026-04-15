@@ -17,6 +17,7 @@ export interface DistributionStats {
   }
   unique?: number
   top_values?: Array<{ value: string; count: number }>
+  pie_image?: string  // base64 PNG
 }
 
 export interface FeatureDistribution {
@@ -27,7 +28,22 @@ export interface FeatureDistribution {
 
 export interface DataDistributionsResponse {
   dataset_info: { rows: number; columns: number; preview_rows: number }
+  plot_type?: string
   plots: FeatureDistribution[]
+  scatter?: {
+    x_feature: string
+    y_feature: string
+    image: string  // base64 PNG
+  }
+  line?: {
+    feature: string
+    x: number[]
+    y: number[]
+    min: number
+    max: number
+    median: number
+    count: number
+  }
   correlation_matrix?: { features: string[]; matrix: number[][] }
   missing_values?: Array<{ feature: string; missing_count: number; missing_rate: number }>
 }

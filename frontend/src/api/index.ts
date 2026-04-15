@@ -6,6 +6,8 @@ export { experimentApi } from './experiments'
 export { vizApi } from './viz'
 export { logsApi } from './logs'
 export { adminApi } from './admin'
+export { explainApi } from './explain'
+export { schedulerApi } from './scheduler'
 
 export type { LoginRequest, RegisterRequest, AuthResponse, User } from './auth'
 export type { DataFile } from './data'
@@ -28,5 +30,14 @@ export type {
   ImputerConfig, ScalerConfig, FeatureSelectConfig, PreprocessingSteps,
   ColumnStats, PreviewResponse, TransformResponse
 } from './preprocessing'
+export type {
+  GlobalSHAPRequest, LocalSHAPRequest, SHAPPlotRequest, ICERequest,
+  GlobalSHAPResponse, LocalSHAPResponse, SHAPPlotResponse, ICEResponse,
+  FeatureImportance, FeatureContribution, ICECurve, ICEPoint,
+} from './explain'
 export type { AdminUser, UserListResponse, CreateUserRequest, UpdateUserRequest } from './admin'
+export type {
+  Job, Execution, JobCreateRequest, JobUpdateRequest,
+  CronValidateResponse, PaginatedJobs, PaginatedExecutions, TriggerResponse,
+} from './scheduler'
 

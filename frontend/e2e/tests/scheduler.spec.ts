@@ -25,7 +25,11 @@ function ensureScreenshotDir() {
 // 辅助函数：登录（复用 training.spec.ts 的模式）
 // ============================================================
 async function loginAsAdmin(page: Page) {
+  // 完整隔离：清除残留 token
+  await page.context().clearCookies()
   await page.goto(`${BASE_URL}/login`)
+  await page.waitForLoadState('domcontentloaded')
+  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
   await page.waitForLoadState('networkidle')
 
   ensureScreenshotDir()
@@ -35,7 +39,6 @@ async function loginAsAdmin(page: Page) {
 
   const filled = await usernameInput.isVisible().catch(() => false)
   if (!filled) {
-    // 可能是已登录状态，跳过
     return
   }
 
@@ -45,12 +48,8 @@ async function loginAsAdmin(page: Page) {
   const loginBtn = page.locator('button[type="submit"]').filter({ hasText: /登录/i }).first()
   await loginBtn.click()
 
-  // 等待跳转到 dashboard
-  await page.waitForURL('**/dashboard**', { timeout: 10000 }).catch(() => {
-    console.log('⚠️ 登录后未检测到跳转，当前 URL:', page.url())
-  })
+  await page.waitForURL('**/dashboard**', { timeout: 10000 })
   await page.waitForLoadState('networkidle')
-  await page.waitForTimeout(500)
 }
 
 // ============================================================
@@ -70,8 +69,8 @@ test.describe('Scheduler — 任务调度模块', () => {
     ensureScreenshotDir()
     await page.screenshot({ path: `${SCREENSHOT_DIR}/scheduler_page_load.png` })
 
-    // 页面标题应该可见
-    const heading = page.locator('h1').filter({ hasText: '任务调度' })
+    // 页面标题应该可见（main 区域内的 h1，避免匹配导航栏同名标题）
+    const heading = page.locator('main h1').filter({ hasText: '任务调度' })
     await expect(heading).toBeVisible({ timeout: 5000 })
 
     // 统计栏应该可见（任务总数）
@@ -104,8 +103,8 @@ test.describe('Scheduler — 任务调度模块', () => {
     await page.waitForLoadState('networkidle')
     await page.waitForTimeout(500)
 
-    // 验证 URL 变化或页面内容
-    const heading = page.locator('h1').filter({ hasText: '任务调度' })
+    // 验证 URL 变化或页面内容（main 区域内的 h1）
+    const heading = page.locator('main h1').filter({ hasText: '任务调度' })
     await expect(heading).toBeVisible({ timeout: 5000 })
 
     console.log('✅ Scheduler Tab 在导航栏可见且可点击')
@@ -119,19 +118,19 @@ test.describe('Scheduler — 任务调度模块', () => {
     ensureScreenshotDir()
     await page.screenshot({ path: `${SCREENSHOT_DIR}/scheduler_before_modal.png` })
 
-    // 查找「新建任务」按钮
-    const createBtn = page.locator('button').filter({ hasText: '新建任务' })
+    // 查找「新建任务」按钮（使用 role=button 精确匹配，避免匹配到表格操作列按钮）
+    const createBtn = page.getByRole('button', { name: '新建任务' }).first()
     await createBtn.waitFor({ state: 'visible', timeout: 5000 })
     await createBtn.click()
 
     // Modal 应该打开
-    const modal = page.locator('h2').filter({ hasText: '新建定时任务' })
+    const modal = page.getByRole('heading', { name: '新建定时任务' })
     await expect(modal).toBeVisible({ timeout: 3000 })
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/scheduler_modal_open.png` })
 
-    // 关闭 Modal
-    const closeBtn = page.locator('button').filter({ hasText: '取消' }).first()
+    // 关闭 Modal（精确选择，取消按钮可能在多处存在）
+    const closeBtn = page.getByRole('button', { name: '取消' }).first()
     await closeBtn.click()
     await expect(modal).not.toBeVisible({ timeout: 3000 })
 
@@ -145,12 +144,10 @@ test.describe('Scheduler — 任务调度模块', () => {
 
     ensureScreenshotDir()
 
-    // 打开新建任务 Modal
-    const createBtn = page.locator('button').filter({ hasText: '新建任务' })
+    // 打开新建任务 Modal（使用 role=button 精确匹配）
+    const createBtn = page.getByRole('button', { name: '新建任务' }).first()
     await createBtn.click()
-
-    const modalTitle = page.locator('h2').filter({ hasText: '新建定时任务' })
-    await modalTitle.waitFor({ state: 'visible', timeout: 5000 })
+    await page.getByRole('heading', { name: '新建定时任务' }).waitFor({ state: 'visible', timeout: 5000 })
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/scheduler_cron_input_empty.png` })
 
@@ -181,10 +178,10 @@ test.describe('Scheduler — 任务调度模块', () => {
 
     ensureScreenshotDir()
 
-    // 打开新建任务 Modal
-    const createBtn = page.locator('button').filter({ hasText: '新建任务' })
+    // 打开新建任务 Modal（使用 role=button 精确匹配）
+    const createBtn = page.getByRole('button', { name: '新建任务' }).first()
     await createBtn.click()
-    await page.locator('h2').filter({ hasText: '新建定时任务' }).waitFor({ state: 'visible', timeout: 5000 })
+    await page.getByRole('heading', { name: '新建定时任务' }).waitFor({ state: 'visible', timeout: 5000 })
 
     // 找到 Cron 输入框并输入非法表达式
     const cronInput = page.locator('input[placeholder*="分 时"]')
@@ -210,13 +207,13 @@ test.describe('Scheduler — 任务调度模块', () => {
 
     ensureScreenshotDir()
 
-    // 打开新建任务 Modal
-    const createBtn = page.locator('button').filter({ hasText: '新建任务' })
+    // 打开新建任务 Modal（使用 role=button 精确匹配）
+    const createBtn = page.getByRole('button', { name: '新建任务' }).first()
     await createBtn.click()
-    await page.locator('h2').filter({ hasText: '新建定时任务' }).waitFor({ state: 'visible', timeout: 5000 })
+    await page.getByRole('heading', { name: '新建定时任务' }).waitFor({ state: 'visible', timeout: 5000 })
 
-    // 点击第一个预设按钮（每天早上 08:00）
-    const presetBtn = page.locator('button').filter({ hasText: '每天早上 08:00' })
+    // 点击预设按钮（使用 role=button 精确匹配）
+    const presetBtn = page.getByRole('button', { name: '每天早上 08:00' }).first()
     await presetBtn.click()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/scheduler_cron_preset_clicked.png` })

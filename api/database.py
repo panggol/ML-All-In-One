@@ -123,15 +123,78 @@ class TrainingJob(Base):
 class TrainedModel(Base):
     """训练好的模型"""
     __tablename__ = "trained_models"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     training_job_id = Column(Integer, ForeignKey("training_jobs.id"), nullable=True)
-    
+
     name = Column(String(100), nullable=False)
     model_type = Column(String(50), nullable=False)
     model_path = Column(String(500), nullable=False)  # 模型文件路径
     metrics = Column(JSON, default=dict)
     config = Column(JSON, default=dict)  # 模型配置
-    
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # 关联
+    versions = relationship("ModelVersion", back_populates="model", cascade="all, delete-orphan")
+
+
+class ModelVersion(Base):
+    """
+    模型版本表
+    为 TrainedModel 提供版本化包装，记录每次训练的元数据和指标。
+    """
+    __tablename__ = "model_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_id = Column(Integer, ForeignKey("trained_models.id"), nullable=False)
+    version = Column(Integer, nullable=False)  # 版本号，整数递增
+    tag = Column(String(20), nullable=False, default="staging")  # staging/production/archived
+
+    # 算法元数据
+    algorithm_type = Column(String(50), nullable=True)
+    model_type = Column(String(50), nullable=True)  # sklearn/xgboost/pytorch
+    task_type = Column(String(20), nullable=True)   # classification/regression
+
+    # 数据集指纹
+    dataset_name = Column(String(255), nullable=True)
+    dataset_hash = Column(String(64), nullable=True)  # SHA256 指纹
+
+    # 训练信息
+    training_params = Column(JSON, default=dict)
+    training_time = Column(Float, nullable=True)      # 秒
+    metrics = Column(JSON, default=dict)             # 评估指标
+    training_job_id = Column(Integer, ForeignKey("training_jobs.id"), nullable=True)
+
+    # 文件信息
+    model_file_path = Column(String(500), nullable=True)
+    model_file_size = Column(Integer, nullable=True)  # bytes
+
+    # 审计字段
+    registered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    registered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # 关联
+    model = relationship("TrainedModel", back_populates="versions")
+
+    # 约束：同一模型下版本号唯一
+    __table_args__ = (
+        # 使用 SQLAlchemy 约束语法（SQLite 兼容）
+    )
+
+
+class ModelVersionHistory(Base):
+    """
+    模型版本操作历史表
+    记录所有版本变更操作（注册/标签变更/回滚/归档），用于审计追溯。
+    """
+    __tablename__ = "model_version_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    model_id = Column(Integer, nullable=False)
+    version = Column(Integer, nullable=False)
+    action = Column(String(20), nullable=False)  # register/tag_change/rollback/archive
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    details = Column(JSON, default=dict)          # 操作详情 JSON
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

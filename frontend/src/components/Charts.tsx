@@ -13,6 +13,8 @@ import {
   Cell,
   LineChart,
   Line,
+  PieChart,
+  Pie,
 } from 'recharts'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -376,6 +378,76 @@ export function FeatureImportanceChart({
   )
 }
 
+// ─── Pie Chart ─────────────────────────────────────────────────────────────────
+
+interface PieChartProps {
+  data: Array<{ name: string; value: number }>
+  loading?: boolean
+  emptyText?: string
+  height?: number
+}
+
+export function PieChartComponent({
+  data,
+  loading = false,
+  emptyText = '暂无饼图数据',
+  height = 300,
+}: PieChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex items-center justify-center" style={{ height }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          <span className="text-sm text-slate-400">加载中…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center text-slate-400" style={{ height }}>
+        <span className="text-sm">{emptyText}</span>
+      </div>
+    )
+  }
+
+  const COLORS = [
+    '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+    '#f43f5e', '#f97316', '#eab308', '#10b981', '#06b6d4',
+  ]
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <PieChart>
+        <Pie
+          data={data}
+          cx="50%"
+          cy="50%"
+          outerRadius={100}
+          dataKey="value"
+          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+          labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+        >
+          {data.map((_, index) => (
+            <Cell key={index} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip
+          contentStyle={{
+            backgroundColor: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            fontSize: 12,
+          }}
+          formatter={(value: number) => [value.toLocaleString(), '计数']}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
+}
+
 // ─── Training Curves Line Chart ───────────────────────────────────────────────
 
 interface TrainingCurvesChartProps {
@@ -497,5 +569,107 @@ export function TrainingCurvesChart({
         })}
       </LineChart>
     </ResponsiveContainer>
+  )
+}
+
+// ─── Single Variable Line Chart (sorted values, distribution trend) ──────────────
+
+export interface SingleVarLineDatum {
+  /** 序号（按值排序后的位置，1-based） */
+  index: number
+  /** 排序后的值 */
+  value: number
+}
+
+interface SingleVarLineChartProps {
+  data: SingleVarLineDatum[]
+  loading?: boolean
+  emptyText?: string
+  color?: string
+  height?: number
+  featureName?: string
+  stats?: { min: number; max: number; median: number; count: number }
+}
+
+export function SingleVarLineChart({
+  data,
+  loading = false,
+  emptyText = '暂无折线图数据',
+  color = '#6366f1',
+  height = 280,
+  featureName,
+  stats,
+}: SingleVarLineChartProps) {
+  if (loading) {
+    return (
+      <div className="w-full flex items-center justify-center" style={{ height }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+          <span className="text-sm text-slate-400">加载中…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center text-slate-400" style={{ height }}>
+        <span className="text-sm">{emptyText}</span>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 8, right: 24, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            dataKey="index"
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            label={{ value: '序号（按值排序）', position: 'insideBottomRight', offset: -6, fontSize: 11, fill: '#94a3b8' }}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: '#64748b' }}
+            width={60}
+          />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              fontSize: 12,
+            }}
+            formatter={(value: number) => [value.toFixed(4), featureName ?? '值']}
+            labelFormatter={(label) => `排序位置 #${label}`}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={2}
+            dot={data.length <= 100 ? { r: 3, fill: color, fillOpacity: 0.7 } : false}
+            name={featureName ?? '值'}
+            connectNulls
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      {stats && (
+        <div className="mt-2 pt-2 border-t border-slate-100 grid grid-cols-4 gap-4">
+          {[
+            { label: '最小值', value: stats.min.toFixed(4) },
+            { label: '中位数', value: stats.median.toFixed(4) },
+            { label: '最大值', value: stats.max.toFixed(4) },
+            { label: '样本数', value: stats.count.toLocaleString() },
+          ].map(({ label, value }) => (
+            <div key={label} className="text-center">
+              <p className="text-xs text-slate-400">{label}</p>
+              <p className="text-sm font-medium text-slate-700">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   )
 }

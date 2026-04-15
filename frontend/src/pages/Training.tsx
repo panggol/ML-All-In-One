@@ -9,17 +9,15 @@ import { dataApi, trainApi, TrainJob, TrainStatus, MetricsCurve } from '../api'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CLASSIFIER_MODELS = [
-  { value: 'RandomForestClassifier', label: 'RandomForest' },
-  { value: 'XGBClassifier', label: 'XGBoost' },
-  { value: 'LGBMClassifier', label: 'LightGBM' },
-  { value: 'LogisticRegression', label: 'LogisticRegression' },
+// Dynamic model lists (defined inline in component to be taskType-aware)
+
+const PYTORCH_MODELS = [
+  { value: 'MLPClassifier', label: 'MLP (PyTorch)' },
 ]
 
-const REGRESSOR_MODELS = [
-  { value: 'RandomForestRegressor', label: 'RandomForest' },
-  { value: 'XGBRegressor', label: 'XGBoost' },
-  { value: 'LGBMRegressor', label: 'LightGBM' },
+const MODEL_TYPE_OPTIONS = [
+  { value: 'sklearn', label: 'Scikit-Learn' },
+  { value: 'pytorch', label: 'PyTorch' },
 ]
 
 const TASK_OPTIONS = [
@@ -649,6 +647,14 @@ export default function Training() {
   const [taskType, setTaskType] = useState<'classification' | 'regression'>('classification')
   const [targetColumn, setTargetColumn] = useState('')
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
+  const [modelType, setModelType] = useState<'sklearn' | 'pytorch'>('sklearn')
+  // PyTorch-specific hyperparameters
+  const [hiddenLayers, setHiddenLayers] = useState('128,64,32')
+  const [activation, setActivation] = useState('relu')
+  const [learningRate, setLearningRate] = useState('0.001')
+  const [epochs, setEpochs] = useState(100)
+  const [batchSize, setBatchSize] = useState(32)
+  const [dropout, setDropout] = useState(0.2)
   const [currentJob, setCurrentJob] = useState<TrainJob | null>(null)
   const [trainingPhase, setTrainingPhase] = useState<TrainingPhase>('idle')
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -676,7 +682,24 @@ export default function Training() {
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const isTraining = trainingPhase === 'running'
-  const currentModelOptions = taskType === 'regression' ? REGRESSOR_MODELS : CLASSIFIER_MODELS
+  // Dynamic model list based on task type AND model type
+  const sklearnClassifierModels = [
+    { value: 'RandomForestClassifier', label: 'RandomForest' },
+    { value: 'XGBClassifier', label: 'XGBoost' },
+    { value: 'LGBMClassifier', label: 'LightGBM' },
+    { value: 'LogisticRegression', label: 'LogisticRegression' },
+    { value: 'GradientBoostingClassifier', label: 'GradientBoosting' },
+    { value: 'SVC', label: 'SVC' },
+  ]
+  const sklearnRegressorModels = [
+    { value: 'RandomForestRegressor', label: 'RandomForest' },
+    { value: 'XGBRegressor', label: 'XGBoost' },
+    { value: 'LGBMRegressor', label: 'LightGBM' },
+    { value: 'LinearRegression', label: 'LinearRegression' },
+    { value: 'SVR', label: 'SVR' },
+  ]
+  const baseOptions = taskType === 'regression' ? sklearnRegressorModels : sklearnClassifierModels
+  const currentModelOptions = modelType === 'pytorch' ? PYTORCH_MODELS : baseOptions
   const finalFeatures = (autoSelectApplied && autoSelectedFeatures.length > 0)
     ? autoSelectedFeatures
     : selectedFeatures
@@ -789,12 +812,12 @@ export default function Training() {
     return () => clearInterval(interval)
   }, [currentJob, trainingPhase])
 
-  // ── Model list reset on task type change ───────────────────────────────
+  // ── Model list reset on task type or model type change ──────────────────
   useEffect(() => {
     if (selectedModel && !currentModelOptions.find(m => m.value === selectedModel)) {
       setSelectedModel(null)
     }
-  }, [taskType])
+  }, [taskType, modelType])
 
   // ── Feature reset on target column change ───────────────────────────────
   useEffect(() => {
@@ -918,13 +941,29 @@ export default function Training() {
       : selectedFeatures
 
     try {
+      // Build params — include PyTorch-specific hyperparameters when applicable
+      const params: Record<string, any> = {}
+      if (modelType === 'pytorch') {
+        // hidden_layer_sizes must be a tuple for PyTorchMLP
+        const layerList = hiddenLayers
+          .split(',')
+          .map((s: string) => parseInt(s.trim(), 10))
+          .filter((n: number) => !isNaN(n) && n > 0)
+        params.hidden_layer_sizes = layerList.length > 0 ? layerList : [128, 64, 32]
+        params.activation = activation
+        params.max_iter = epochs
+        params.solver = 'adam'
+        params.alpha = 0.0001
+      }
+
       const job = await trainApi.create({
         data_file_id: selectedFile!,
         target_column: targetColumn,
         task_type: taskType,
-        model_type: 'sklearn',
+        model_type: modelType,
         model_name: selectedModel!,
         feature_columns: featuresToUse,
+        params,
       })
 
       setCurrentJob(job)
@@ -1143,6 +1182,28 @@ export default function Training() {
                 </div>
               )}
 
+              {/* Model type selector (sklearn / pytorch) */}
+              <div className="mb-4">
+                <p className="block text-sm font-medium text-slate-700 mb-3">模型框架</p>
+                <div className="flex gap-2">
+                  {MODEL_TYPE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setModelType(opt.value as 'sklearn' | 'pytorch')}
+                      disabled={configDisabled}
+                      className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                        modelType === opt.value
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 ring-2 ring-primary-200'
+                          : 'border-slate-200 hover:border-primary-300 hover:bg-slate-50 text-slate-700'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      aria-pressed={modelType === opt.value}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Model selection */}
               <div>
                 <p className="block text-sm font-medium text-slate-700 mb-3">选择模型</p>
@@ -1164,6 +1225,119 @@ export default function Training() {
                   ))}
                 </div>
               </div>
+
+              {/* PyTorch-specific hyperparameters */}
+              {modelType === 'pytorch' && selectedModel && (
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Sparkles className="w-4 h-4 text-primary-600" />
+                    <h3 className="text-sm font-semibold text-slate-900">PyTorch 超参数</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Hidden Layers */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Hidden Layers
+                      </label>
+                      <input
+                        type="text"
+                        value={hiddenLayers}
+                        onChange={e => setHiddenLayers(e.target.value)}
+                        disabled={configDisabled}
+                        placeholder="128,64,32"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      <p className="mt-1 text-xs text-slate-400">逗号分隔，如 128,64,32</p>
+                    </div>
+
+                    {/* Activation */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Activation
+                      </label>
+                      <select
+                        value={activation}
+                        onChange={e => setActivation(e.target.value)}
+                        disabled={configDisabled}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="relu">ReLU</option>
+                        <option value="tanh">Tanh</option>
+                        <option value="sigmoid">Sigmoid</option>
+                        <option value="leaky_relu">Leaky ReLU</option>
+                      </select>
+                    </div>
+
+                    {/* Learning Rate */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Learning Rate
+                      </label>
+                      <input
+                        type="number"
+                        value={learningRate}
+                        onChange={e => setLearningRate(e.target.value)}
+                        disabled={configDisabled}
+                        step="0.0001"
+                        min="0.0001"
+                        max="1"
+                        placeholder="0.001"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Epochs */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Epochs
+                      </label>
+                      <input
+                        type="number"
+                        value={epochs}
+                        onChange={e => setEpochs(parseInt(e.target.value) || 100)}
+                        disabled={configDisabled}
+                        min="1"
+                        max="10000"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Batch Size */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Batch Size
+                      </label>
+                      <input
+                        type="number"
+                        value={batchSize}
+                        onChange={e => setBatchSize(parseInt(e.target.value) || 32)}
+                        disabled={configDisabled}
+                        min="1"
+                        max="1024"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* Dropout */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Dropout
+                      </label>
+                      <input
+                        type="number"
+                        value={dropout}
+                        onChange={e => setDropout(parseFloat(e.target.value) ?? 0.2)}
+                        disabled={configDisabled}
+                        step="0.05"
+                        min="0"
+                        max="0.9"
+                        placeholder="0.2"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
         </div>

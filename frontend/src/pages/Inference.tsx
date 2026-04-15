@@ -6,6 +6,7 @@ import {
 import Card from '../components/Card'
 import Button from '../components/Button'
 import { modelsApi, dataApi, type ModelInfo, type InferenceResult } from '../api'
+import { explainApi } from '../api/explain'
 
 // ============ 类型定义 ============
 
@@ -34,6 +35,57 @@ export default function Inference() {
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null)
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null)
   const [loadingModels, setLoadingModels] = useState(false)
+
+  // 主 Tab 切换
+  const [mainTab, setMainTab] = useState<'inference' | 'explainability'>('inference')
+
+  // 可解释性状态
+  const [explainType, setExplainType] = useState<'beeswarm' | 'bar' | 'waterfall' | 'local'>('beeswarm')
+  const [sampleSize, setSampleSize] = useState(100)
+  const [localSampleInput, setLocalSampleInput] = useState('')
+  const [shapImageUrl, setShapImageUrl] = useState('')
+  const [shapError, setShapError] = useState('')
+  const [isGeneratingPlot, setIsGeneratingPlot] = useState(false)
+  const [localResult, setLocalResult] = useState<{ feature: string; value: number; direction: string }[]>([])
+
+  // SHAP handlers
+  const generateSHAPPlot = async () => {
+    if (!selectedModelId) return
+    setIsGeneratingPlot(true)
+    setShapError('')
+    setShapImageUrl('')
+    try {
+      const res = await explainApi.plot({
+        model_id: selectedModelId,
+        plot_type: explainType as 'beeswarm' | 'bar' | 'waterfall',
+        sample_size: sampleSize,
+      })
+      setShapImageUrl(`data:image/png;base64,${res.image_base64}`)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      setShapError(err.response?.data?.detail || err.message || '未知错误')
+    } finally {
+      setIsGeneratingPlot(false)
+    }
+  }
+
+  const generateLocalSHAP = async () => {
+    if (!selectedModelId || !localSampleInput.trim()) return
+    setIsGeneratingPlot(true)
+    setShapError('')
+    setShapImageUrl('')
+    setLocalResult([])
+    try {
+      const features = JSON.parse(localSampleInput)
+      const res = await explainApi.local({ model_id: selectedModelId, sample: features })
+      setLocalResult(res.shap_values)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      setShapError(err.response?.data?.detail || err.message || '未知错误')
+    } finally {
+      setIsGeneratingPlot(false)
+    }
+  }
 
   // 数据文件列表（路径模式）
   const [dataFiles, setDataFiles] = useState<DataFileInfo[]>([])
@@ -339,8 +391,33 @@ export default function Inference() {
           <h1 className="text-2xl font-bold text-slate-900">模型推理</h1>
           <p className="text-slate-500 mt-1">选择模型，输入数据，执行批量推理</p>
         </div>
+
+        {/* 主 Tab 切换 */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMainTab('inference')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              mainTab === 'inference'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            推理
+          </button>
+          <button
+            onClick={() => setMainTab('explainability')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              mainTab === 'explainability'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            可解释性
+          </button>
+        </div>
       </div>
 
+      {mainTab === 'inference' && (
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* ====== 左侧配置面板 (40%) ====== */}
         <div className="lg:col-span-2 space-y-6">
@@ -773,6 +850,140 @@ export default function Inference() {
           </Card>
         </div>
       </div>
+      )}
+
+      {/* ====== 可解释性 Tab ====== */}
+      {mainTab === 'explainability' && (
+        <div className="space-y-6">
+          {/* 模型选择 */}
+          <Card>
+            <h2 className="text-base font-semibold text-slate-900 mb-4">① 选择模型</h2>
+            {models.length === 0 ? (
+              <p className="text-slate-400 text-sm">暂无训练好的模型</p>
+            ) : (
+              <div className="space-y-2">
+                {models.map(model => (
+                  <div
+                    key={model.id}
+                    onClick={() => setSelectedModelId(model.id)}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                      selectedModelId === model.id
+                        ? 'bg-blue-50 border border-blue-200'
+                        : 'hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    <Cpu className="w-4 h-4 text-slate-400" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{model.name}</p>
+                      <p className="text-xs text-slate-400">{model.model_type}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {selectedModelId && (
+            <Card>
+              <h2 className="text-base font-semibold text-slate-900 mb-4">② SHAP 可解释性</h2>
+
+              {/* 图类型切换 */}
+              <div className="flex gap-2 mb-4">
+                {(['beeswarm', 'bar', 'local'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setExplainType(type)}
+                    className={`px-4 py-2 rounded text-sm font-medium transition ${
+                      explainType === type
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {type === 'beeswarm' ? 'SHAP Summary' : type === 'bar' ? 'Feature Importance' : 'Local Explanation'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Summary / Bar 模式 */}
+              {explainType !== 'local' && (
+                <div className="mb-4 flex gap-3 items-center">
+                  <span className="text-sm text-slate-600">样本数量：</span>
+                  <input
+                    type="number"
+                    min={10}
+                    max={1000}
+                    value={sampleSize}
+                    onChange={e => setSampleSize(Number(e.target.value))}
+                    className="border rounded px-2 py-1 w-24 text-sm"
+                  />
+                  <button
+                    onClick={generateSHAPPlot}
+                    disabled={isGeneratingPlot}
+                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isGeneratingPlot ? '生成中...' : '生成 SHAP 图'}
+                  </button>
+                </div>
+              )}
+
+              {/* Local 模式 */}
+              {explainType === 'local' && (
+                <div className="mb-4 space-y-3">
+                  <textarea
+                    className="w-full border rounded px-3 py-2 text-sm font-mono"
+                    rows={6}
+                    placeholder={'{"feature1": 0.5, "feature2": -0.3, ...}'}
+                    value={localSampleInput}
+                    onChange={e => setLocalSampleInput(e.target.value)}
+                  />
+                  <button
+                    onClick={generateLocalSHAP}
+                    disabled={isGeneratingPlot || !localSampleInput.trim()}
+                    className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {isGeneratingPlot ? '解释中...' : '解释样本'}
+                  </button>
+                </div>
+              )}
+
+              {/* 结果展示 */}
+              {shapImageUrl && (
+                <div className="mt-4">
+                  <img src={shapImageUrl} alt="SHAP 可视化" className="w-full max-w-2xl rounded border" />
+                </div>
+              )}
+              {localResult.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2">特征贡献（按重要性排序）</h3>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-slate-500 border-b">
+                        <th className="py-2 pr-4">#</th>
+                        <th className="py-2 pr-4">特征</th>
+                        <th className="py-2 pr-4">SHAP 值</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {localResult.map((row, i) => (
+                        <tr key={row.feature} className="border-b border-slate-100">
+                          <td className="py-2 pr-4 text-slate-400">{i + 1}</td>
+                          <td className="py-2 pr-4 font-medium text-slate-800">{row.feature}</td>
+                          <td className={`py-2 font-mono ${row.direction === 'positive' ? 'text-green-600' : row.direction === 'negative' ? 'text-red-600' : 'text-slate-500'}`}>
+                            {row.value.toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {shapError && (
+                <p className="mt-2 text-red-600 text-sm">错误：{shapError}</p>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   )
 }

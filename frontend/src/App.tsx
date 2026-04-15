@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity, BarChart3, FileText, ShieldCheck } from 'lucide-react'
+import { Sparkles, Database, LineChart, LogOut, User, Wand, Cpu, FolderOpen, Activity, BarChart3, FileText, ShieldCheck, Package, TrendingUp, Clock, GitBranch } from 'lucide-react'
 import { useState, useEffect, lazy, Suspense } from 'react'
 // 懒加载页面组件，减少主包体积
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Monitor = lazy(() => import('./pages/Monitor'))
 const Training = lazy(() => import('./pages/Training'))
+const Forecasting = lazy(() => import('./pages/Forecasting'))
 const Experiments = lazy(() => import('./pages/Experiments'))
 const AutoML = lazy(() => import('./pages/AutoML'))
 const Preprocessing = lazy(() => import('./pages/Preprocessing'))
@@ -14,6 +15,9 @@ const DataVisualization = lazy(() => import('./pages/DataVisualization'))
 const AuthPage = lazy(() => import('./pages/AuthPage'))
 const Logs = lazy(() => import('./pages/Logs'))
 const AdminUsers = lazy(() => import('./pages/AdminUsers'))
+const Models = lazy(() => import('./pages/Models'))
+const Scheduler = lazy(() => import('./pages/Scheduler'))
+const Pipelines = lazy(() => import('./pages/Pipelines'))
 
 // 懒加载页面的加载状态
 function PageLoader() {
@@ -27,20 +31,24 @@ function PageLoader() {
   )
 }
 
-type Tab = 'dashboard' | 'monitor' | 'training' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data' | 'visualization' | 'logs' | 'admin'
+type Tab = 'dashboard' | 'monitor' | 'training' | 'forecasting' | 'experiments' | 'automl' | 'preprocessing' | 'inference' | 'data' | 'visualization' | 'logs' | 'admin' | 'models' | 'scheduler'
 
 const tabs = [
   { id: 'dashboard' as const, label: '仪表盘', icon: Sparkles },
   { id: 'monitor' as const, label: '系统监控', icon: Activity },
   { id: 'data' as const, label: '数据管理', icon: FolderOpen },
+  { id: 'forecasting' as const, label: '时序预测', icon: TrendingUp },
   { id: 'training' as const, label: '模型训练', icon: Database },
   { id: 'experiments' as const, label: '实验记录', icon: LineChart },
+  { id: 'models' as const, label: '模型管理', icon: Package },
   { id: 'preprocessing' as const, label: '预处理', icon: Wand },
   { id: 'inference' as const, label: '推理', icon: Cpu },
   { id: 'automl' as const, label: 'AutoML', icon: Sparkles },
   { id: 'visualization' as const, label: '数据可视化', icon: BarChart3 },
   { id: 'logs' as const, label: '日志', icon: FileText },
   { id: 'admin' as const, label: '用户管理', icon: ShieldCheck },
+  { id: 'scheduler' as const, label: '任务调度', icon: Clock },
+  { id: 'pipelines' as const, label: 'Pipeline 编排', icon: GitBranch },
 ]
 
 // 私有路由包装
@@ -82,10 +90,14 @@ function Layout() {
     else if (path.includes('/monitor')) setActiveTab('monitor')
     else if (path.includes('/data')) setActiveTab('data')
     else if (path.includes('/training')) setActiveTab('training')
+    else if (path.includes('/forecasting')) setActiveTab('forecasting')
     else if (path.includes('/experiments')) setActiveTab('experiments')
     else if (path.includes('/automl')) setActiveTab('automl')
+    else if (path.includes('/models')) setActiveTab('models')
     else if (path.includes('/preprocessing')) setActiveTab('preprocessing')
     else if (path.includes('/inference')) setActiveTab('inference')
+    else if (path.includes('/scheduler')) setActiveTab('scheduler')
+    else if (path.includes('/pipelines')) setActiveTab('pipelines')
     else setActiveTab('dashboard')
   }, [location.pathname])
 
@@ -197,6 +209,7 @@ function Layout() {
             {activeTab === 'monitor' && <Monitor />}
             {activeTab === 'data' && <DataManagement />}
             {activeTab === 'training' && <Training />}
+            {activeTab === 'forecasting' && <Forecasting />}
             {activeTab === 'experiments' && <Experiments />}
             {activeTab === 'preprocessing' && <Preprocessing />}
             {activeTab === 'inference' && <Inference />}
@@ -204,6 +217,9 @@ function Layout() {
             {activeTab === 'visualization' && <DataVisualization />}
             {activeTab === 'logs' && <Logs />}
             {activeTab === 'admin' && <AdminUsers />}
+            {activeTab === 'models' && <Models />}
+            {activeTab === 'scheduler' && <Scheduler />}
+            {activeTab === 'pipelines' && <Pipelines />}
           </Suspense>
         </main>
       </div>
@@ -223,13 +239,17 @@ function App() {
             <Route path="/monitor" element={<Layout />} />
             <Route path="/dashboard" element={<Layout />} />
             <Route path="/training" element={<Layout />} />
+            <Route path="/forecasting" element={<Layout />} />
             <Route path="/experiments" element={<Layout />} />
+            <Route path="/models" element={<Layout />} />
             <Route path="/preprocessing" element={<Layout />} />
             <Route path="/inference" element={<Layout />} />
             <Route path="/automl" element={<Layout />} />
             <Route path="/visualization" element={<Layout />} />
             <Route path="/logs" element={<Layout />} />
             <Route path="/admin/users" element={<Layout />} />
+            <Route path="/scheduler" element={<Layout />} />
+            <Route path="/pipelines" element={<Layout />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

@@ -44,3 +44,42 @@ api.interceptors.response.use(
 )
 
 export default api
+
+// ============ FormData 上传支持 ============
+
+export const apiFormData = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 120000, // 上传文件需要更长的超时
+  headers: {
+    // 不设置 Content-Type，让浏览器自动设置 multipart/form-data
+  },
+})
+
+apiFormData.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+apiFormData.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const token = localStorage.getItem('token')
+      if (token) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
+// 为 api 对象补充 FormData 方法
+;(api as any).postFormData = function <T>(url: string, formData: FormData, params?: Record<string, any>) {
+  return apiFormData.post<T>(url, formData, { params })
+}
+

@@ -25,8 +25,8 @@ class ModelResponse(BaseModel):
     name: str
     model_type: str
     task_type: Optional[str] = None
-    metrics: dict
-    created_at: str
+    metrics: Optional[dict] = None
+    created_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,7 +52,7 @@ async def list_models(
             model_type=model.model_type,
             task_type=_extract_task_type(model),
             metrics=model.metrics,
-            created_at=model.created_at.isoformat()
+            created_at=model.created_at.isoformat() if model.created_at else None
         )
         for model in models
     ]
@@ -79,7 +79,7 @@ async def get_model(
         model_type=model.model_type,
         task_type=_extract_task_type(model),
         metrics=model.metrics,
-        created_at=model.created_at.isoformat()
+        created_at=model.created_at.isoformat() if model.created_at else None
     )
 
 

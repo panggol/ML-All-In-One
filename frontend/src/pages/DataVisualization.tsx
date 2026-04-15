@@ -9,10 +9,12 @@ import {
   FeatureImportanceChart,
   TrainingCurvesChart,
   BoxplotChart,
+  SingleVarLineChart,
   type HistogramDatum,
   type ScatterDatum,
   type FeatureImportanceDatum,
   type BoxplotDatum,
+  type SingleVarLineDatum,
 } from '../components/Charts'
 import { dataApi, experimentApi, vizApi } from '../api'
 import type { DataFile, Experiment } from '../api'
@@ -54,8 +56,10 @@ export default function DataVisualization() {
   const [experiments, setExperiments] = useState<Experiment[]>([])
   const [selectedDataFile, setSelectedDataFile] = useState<number | null>(null)
   const [selectedExp, setSelectedExp] = useState<number | null>(null)
-  const [plotType, setPlotType] = useState<'histogram' | 'boxplot' | 'scatter' | 'line'>('histogram')
+  const [plotType, setPlotType] = useState<'histogram' | 'boxplot' | 'scatter' | 'pie' | 'line'>('histogram')
   const [selectedFeature, setSelectedFeature] = useState<string>('')
+  const [xFeature, setXFeature] = useState<string>('')
+  const [yFeature, setYFeature] = useState<string>('')
   const [selectedTab, setSelectedTab] = useState<'distribution' | 'importance' | 'evaluation' | 'training'>('distribution')
 
   const [loadingDist, setLoadingDist] = useState(false)
@@ -67,6 +71,9 @@ export default function DataVisualization() {
   const [distData, setDistData] = useState<HistogramDatum[]>([])
   const [boxplotData, setBoxplotData] = useState<BoxplotDatum[]>([])
   const [scatterData, setScatterData] = useState<ScatterDatum[]>([])
+  const [pieImage, setPieImage] = useState<string>('')
+  const [lineData, setLineData] = useState<SingleVarLineDatum[]>([])
+  const [lineStats, setLineStats] = useState<{ min: number; max: number; median: number; count: number } | null>(null)
   const [importanceData, setImportanceData] = useState<FeatureImportanceDatum[]>([])
   const [distLoaded, setDistLoaded] = useState(false)
   const [scatterLoaded, setScatterLoaded] = useState(false)
@@ -96,44 +103,89 @@ export default function DataVisualization() {
     setLoadingDist(true)
     setDistError('')
     setDistLoaded(false)
+    setDistData([])
+    setBoxplotData([])
+    setScatterData([])
+    setPieImage('')
+    setLineData([])
+    setLineStats(null)
     try {
-      const data = await vizApi.getDistributions(selectedDataFile, { plot_type: plotType })
-      // 始终找数值特征（有任一统计数据的）
-      const numericPlot = data.plots.find((p) => p.dtype !== 'object' && (
-        p.stats.histogram || p.stats.boxplot
-      ))
+      const data = await vizApi.getDistributions(selectedDataFile, {
+        plot_type: plotType,
+        features: plotType === 'scatter'
+          ? `${xFeature || ''},${yFeature || ''}`
+          : (plotType === 'line' ? selectedFeature : selectedFeature) || undefined,
+      })
+
+      if (plotType === 'scatter') {
+        // 后端返回 scatter.image（base64 PNG）
+        const img = data.scatter?.image
+        if (img) {
+          setScatterData([{ x: 0, y: 0, name: img }] as unknown as ScatterDatum[])
+          ;(window as any).__scatterImg = img
+        }
+        setDistLoaded(true)
+        return
+      }
+
+      // line 模式：单变量折线图
+      if (plotType === 'line') {
+        const line = data.line
+        if (line && line.x && line.y) {
+          setSelectedFeature(line.feature)
+          setLineData(line.x.map((v: number, i: number) => ({ index: v, value: line.y[i] })))
+          setLineStats({ min: line.min, max: line.max, median: line.median, count: line.count })
+        }
+        // 同步 dtype 列表
+        const nums = (data.plots || []).filter((p: any) => p.dtype !== 'object').map((p: any) => p.feature)
+        const cats = (data.plots || []).filter((p: any) => p.dtype === 'object').map((p: any) => p.feature)
+        setNumericColumns(nums)
+        setCategoricalColumns(cats)
+        setDistLoaded(true)
+        return
+      }
+
+      // histogram / boxplot / pie
+      const numericPlot = data.plots.find(
+        (p) => p.dtype !== 'object' && (p.stats.histogram || p.stats.boxplot)
+      )
+      // 同步 dtype 列表
+      const nums = data.plots.filter((p) => p.dtype !== 'object').map((p) => p.feature)
+      const cats = data.plots.filter((p) => p.dtype === 'object').map((p) => p.feature)
+      setNumericColumns(nums)
+      setCategoricalColumns(cats)
+      if (nums.length >= 2 && !xFeature && !yFeature) {
+        setXFeature(nums[0])
+        setYFeature(nums[1])
+      }
       if (numericPlot) {
         setSelectedFeature(numericPlot.feature)
         if (numericPlot.stats.histogram) {
           setDistData(toHistogramData(numericPlot.stats))
-        } else {
-          setDistData([])
         }
         if (numericPlot.stats.boxplot) {
-          setBoxplotData([{
-            feature: numericPlot.feature,
-            ...numericPlot.stats.boxplot,
-          }])
-        } else {
-          setBoxplotData([])
+          setBoxplotData([{ feature: numericPlot.feature, ...numericPlot.stats.boxplot }])
         }
       } else if (data.plots.length > 0) {
-        setSelectedFeature(data.plots[0].feature)
-        setDistData(data.plots[0].stats.histogram ? toHistogramData(data.plots[0].stats) : [])
-        setBoxplotData(data.plots[0].stats.boxplot ? [{
-          feature: data.plots[0].feature,
-          ...data.plots[0].stats.boxplot,
-        }] : [])
+        const first = data.plots[0]
+        setSelectedFeature(first.feature)
+        if (first.stats.histogram) setDistData(toHistogramData(first.stats))
+        if (first.stats.boxplot) setBoxplotData([{ feature: first.feature, ...first.stats.boxplot }])
+        if (first.stats.pie_image) setPieImage(first.stats.pie_image)
       }
-      setSummary({ rows: data.dataset_info.rows, columns: data.dataset_info.columns, numeric_features: data.plots.filter(p => p.dtype !== 'object').length })
+      setSummary({
+        rows: data.dataset_info.rows,
+        columns: data.dataset_info.columns,
+        numeric_features: data.plots.filter((p) => p.dtype !== 'object').length,
+      })
       setDistLoaded(true)
     } catch (e: any) {
-      setDistError(e?.response?.data?.detail || '加载失败')
+      setDistError(e?.response?.data?.detail || e?.message || '加载失败')
       setDistLoaded(true)
     } finally {
       setLoadingDist(false)
     }
-  }, [selectedDataFile, plotType])
+  }, [selectedDataFile, plotType, selectedFeature, xFeature, yFeature])
 
   // 加载评估散点图（真实值 vs 预测值）
   const loadScatter = useCallback(async () => {
@@ -226,6 +278,10 @@ export default function DataVisualization() {
   const currentFile = dataFiles.find((f) => f.id === selectedDataFile)
   const featureOptions = currentFile?.columns.map((c) => ({ value: c, label: c })) || []
 
+  // 从 summary 中获取数值列 / 类别列
+  const [numericColumns, setNumericColumns] = useState<string[]>([])
+  const [categoricalColumns, setCategoricalColumns] = useState<string[]>([])
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -316,20 +372,73 @@ export default function DataVisualization() {
                   options={[
                     { value: 'histogram', label: '直方图' },
                     { value: 'boxplot', label: '箱线图' },
-                    { value: 'scatter', label: '散点图' },
-                    { value: 'line', label: '折线图' },
+                    ...(numericColumns.length >= 1
+                      ? [{ value: 'line', label: '折线图' }]
+                      : []),
+                    ...(numericColumns.length >= 2
+                      ? [{ value: 'scatter', label: '散点图' }]
+                      : []),
+                    ...(categoricalColumns.length > 0
+                      ? [{ value: 'pie', label: '饼图' }]
+                      : []),
                   ]}
                   value={plotType}
-                  onChange={(e) => setPlotType(e.target.value as 'histogram' | 'boxplot' | 'scatter' | 'line')}
+                  onChange={(e) => {
+                    const val = e.target.value as 'histogram' | 'boxplot' | 'scatter' | 'pie'
+                    setPlotType(val)
+                    setDistData([])
+                    setBoxplotData([])
+                    setPieImage('')
+                    setScatterData([])
+                    // scatter 模式下默认选两个数值列
+                    if (val === 'scatter' && numericColumns.length >= 2) {
+                      setXFeature(numericColumns[0])
+                      setYFeature(numericColumns[1])
+                    }
+                  }}
                   className="w-28"
                 />
-                <Select
-                  label="特征"
-                  options={featureOptions}
-                  value={selectedFeature}
-                  onChange={(e) => setSelectedFeature(e.target.value)}
-                  className="w-40"
-                />
+
+                {/* 散点图：两个特征选择 */}
+                {plotType === 'scatter' && (
+                  <>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">X 轴特征</label>
+                      <select
+                        value={xFeature}
+                        onChange={(e) => setXFeature(e.target.value)}
+                        className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      >
+                        {numericColumns.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Y 轴特征</label>
+                      <select
+                        value={yFeature}
+                        onChange={(e) => setYFeature(e.target.value)}
+                        className="border border-slate-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-400"
+                      >
+                        {numericColumns.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                {/* histogram / boxplot / line：单个特征选择 */}
+                {(plotType === 'histogram' || plotType === 'boxplot' || plotType === 'line') && (
+                  <Select
+                    label="特征"
+                    options={featureOptions}
+                    value={selectedFeature}
+                    onChange={(e) => setSelectedFeature(e.target.value)}
+                    className="w-40"
+                  />
+                )}
               </div>
             </div>
 
@@ -358,10 +467,66 @@ export default function DataVisualization() {
                 height={280}
               />
             )}
-            {(plotType === 'scatter' || plotType === 'line') && (
-              <div className="flex flex-col items-center justify-center" style={{ height: 280 }}>
-                <AlertCircle className="w-8 h-8 text-slate-300 mb-3" />
-                <p className="text-sm text-slate-400">暂不支持 {plotType === 'scatter' ? '散点图' : '折线图'}，请选择「直方图」或「箱线图」</p>
+
+            {/* 折线图（单变量，按值排序后连线） */}
+            {plotType === 'line' && (
+              <SingleVarLineChart
+                data={lineData}
+                loading={loadingDist || !distLoaded}
+                emptyText={selectedDataFile ? '暂无折线图数据' : '请先选择数据集'}
+                color="#6366f1"
+                height={280}
+                featureName={selectedFeature}
+                stats={lineStats ?? undefined}
+              />
+            )}
+
+            {/* 散点图（后端返回 base64 图片） */}
+            {plotType === 'scatter' && distLoaded && !loadingDist && !distError && (
+              <div className="flex justify-center">
+                {(window as any).__scatterImg ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={(window as any).__scatterImg}
+                    alt="scatter plot"
+                    style={{ maxWidth: '100%', height: 280 }}
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 text-slate-400" style={{ height: 280 }}>
+                    <AlertCircle className="w-5 h-5" />
+                    <span className="text-sm">散点图需要至少两个数值列</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {plotType === 'scatter' && (loadingDist || !distLoaded) && (
+              <div className="flex items-center justify-center" style={{ height: 280 }}>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                  <span className="text-sm text-slate-400">加载中…</span>
+                </div>
+              </div>
+            )}
+
+            {/* 饼图 */}
+            {plotType === 'pie' && pieImage && (
+              <div className="flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pieImage} alt="pie chart" style={{ maxWidth: '100%', height: 300 }} />
+              </div>
+            )}
+            {plotType === 'pie' && !pieImage && distLoaded && !loadingDist && (
+              <div className="flex items-center gap-2 text-slate-400 justify-center" style={{ height: 280 }}>
+                <AlertCircle className="w-5 h-5" />
+                <span className="text-sm">请选择类别型特征查看饼图</span>
+              </div>
+            )}
+            {plotType === 'pie' && (loadingDist || !distLoaded) && (
+              <div className="flex items-center justify-center" style={{ height: 280 }}>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                  <span className="text-sm text-slate-400">加载中…</span>
+                </div>
               </div>
             )}
 

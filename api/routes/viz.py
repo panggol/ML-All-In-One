@@ -80,6 +80,107 @@ def _boxplot_data(series: pd.Series) -> dict:
     }
 
 
+def _render_pie_chart(series: pd.Series) -> str:
+    """渲染饼图并返回 base64 PNG"""
+    data = series.dropna()
+    if len(data) == 0:
+        return ""
+    vc = data.value_counts()
+    labels = [str(k) for k in vc.index.tolist()]
+    sizes = vc.values.tolist()
+
+    colors = [
+        '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+        '#f43f5e', '#f97316', '#eab308', '#10b981', '#06b6d4',
+    ]
+    fig, ax = plt.subplots(figsize=(6, 6))
+    wedges, texts, autotexts = ax.pie(
+        sizes, labels=labels, autopct='%1.1f%%',
+        colors=colors[:len(sizes)], startangle=90,
+        pctdistance=0.75,
+    )
+    for text in texts:
+        text.set_fontsize(9)
+    for autotext in autotexts:
+        autotext.set_fontsize(8)
+        autotext.set_color('white')
+    ax.set_title(f'{series.name or "分布"} 占比', fontsize=11)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+    buf.seek(0)
+    import base64
+    img_b64 = base64.b64encode(buf.read()).decode()
+    plt.close(fig)
+    return f"data:image/png;base64,{img_b64}"
+
+
+def _render_scatter_chart(x_data: pd.Series, y_data: pd.Series) -> str:
+    """渲染散点图并返回 base64 PNG"""
+    x = x_data.dropna()
+    y = y_data.dropna()
+    # 对齐索引
+    common_idx = x.index.intersection(y.index)
+    x = x[common_idx]
+    y = y[common_idx]
+    if len(x) == 0:
+        return ""
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.scatter(x.values, y.values, alpha=0.5, s=20, color='#6366f1')
+    ax.set_xlabel(x.name or 'X', fontsize=10)
+    ax.set_ylabel(y.name or 'Y', fontsize=10)
+    ax.set_title(f'{x.name or "X"} vs {y.name or "Y"}', fontsize=11)
+    ax.grid(True, alpha=0.3)
+    # 添加趋势线
+    if len(x) > 1:
+        z = np.polyfit(x.values, y.values, 1)
+        p = np.poly1d(z)
+        x_line = np.linspace(x.min(), x.max(), 100)
+        ax.plot(x_line, p(x_line), 'r--', linewidth=1.5, alpha=0.8, label='趋势线')
+        ax.legend(fontsize=9)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=120, bbox_inches='tight')
+    buf.seek(0)
+    import base64
+    img_b64 = base64.b64encode(buf.read()).decode()
+    plt.close(fig)
+    return f"data:image/png;base64,{img_b64}"
+
+
+def _line_chart_data(series: pd.Series, max_points: int = 2000) -> dict:
+    """
+    计算单变量折线图数据：值按从小到大排序后连线
+    用于展示单列数值型数据的分布形状和趋势
+    """
+    data = series.dropna()
+    if len(data) == 0:
+        return {}
+
+    # 降采样（数据点过多时抽样，保持排序性）
+    if len(data) > max_points:
+        indices = np.linspace(0, len(data) - 1, max_points, dtype=int)
+        sampled = data.iloc[indices]
+    else:
+        sampled = data
+
+    # 按值从小到大排序
+    sorted_vals = sampled.sort_values().values
+    # x 轴：序号（1-based）
+    x_vals = list(range(1, len(sorted_vals) + 1))
+    y_vals = [float(v) for v in sorted_vals]
+
+    return {
+        "x": x_vals,
+        "y": y_vals,
+        "min": float(data.min()),
+        "max": float(data.max()),
+        "median": float(data.median()),
+        "count": int(data.count()),
+    }
+
+
 def _missing_values(df: pd.DataFrame) -> list:
     """计算缺失值统计"""
     result = []
@@ -109,8 +210,8 @@ async def get_data_distributions(
     """
     获取数据集的分布统计信息
 
-    - **features**: 逗号分隔的特征名，默认全部
-    - **plot_type**: histogram | boxplot
+    - **features**: 逗号分隔的特征名，scatter模式需传两个（x,y），默认全部
+    - **plot_type**: histogram | boxplot | scatter | pie | line
     - **sample_size**: 降采样行数（默认 10000）
     """
     data_file = db.query(DataFile).filter(
@@ -139,6 +240,82 @@ async def get_data_distributions(
     if len(df) > sample_size:
         df = df.sample(n=sample_size, random_state=42)
 
+    # ── scatter 模式：需要两个数值列 ──────────────────────────────────────
+    if plot_type == "scatter":
+        requested = []
+        if features:
+            requested = [f.strip() for f in features.split(",")]
+        else:
+            # 自动找两个数值列
+            numeric = df.select_dtypes(include=[np.number]).columns.tolist()
+            requested = numeric[:2] if len(numeric) >= 2 else []
+
+        if len(requested) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="散点图需要至少两个数值列，请通过 features 参数传入（如 ?features=col1,col2）"
+            )
+
+        x_col, y_col = requested[0], requested[1]
+        if x_col not in df.columns or y_col not in df.columns:
+            raise HTTPException(status_code=400, detail=f"特征不存在: {x_col} 或 {y_col}")
+        if not pd.api.types.is_numeric_dtype(df[x_col]) or not pd.api.types.is_numeric_dtype(df[y_col]):
+            raise HTTPException(status_code=400, detail="散点图的两个特征必须都是数值类型")
+
+        scatter_img = _render_scatter_chart(df[x_col], df[y_col])
+        result = {
+            "dataset_info": {
+                "rows": int(data_file.rows),
+                "columns": len(df.columns),
+                "preview_rows": len(df),
+            },
+            "plot_type": "scatter",
+            "scatter": {
+                "x_feature": x_col,
+                "y_feature": y_col,
+                "image": scatter_img,
+            },
+        }
+        return result
+
+    # ── line 模式：单变量折线图，按值排序后连线 ───────────────────────────────
+    if plot_type == "line":
+        requested = []
+        if features:
+            requested = [f.strip() for f in features.split(",")]
+        else:
+            # 自动找第一个数值列
+            numeric = df.select_dtypes(include=[np.number]).columns.tolist()
+            requested = [numeric[0]] if numeric else []
+
+        if not requested:
+            raise HTTPException(
+                status_code=400,
+                detail="折线图需要至少一个数值列，请通过 features 参数传入列名"
+            )
+
+        col = requested[0]
+        if col not in df.columns:
+            raise HTTPException(status_code=400, detail=f"特征不存在: {col}")
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            raise HTTPException(status_code=400, detail="折线图仅支持数值类型特征")
+
+        line_data = _line_chart_data(df[col])
+        result = {
+            "dataset_info": {
+                "rows": int(data_file.rows),
+                "columns": len(df.columns),
+                "preview_rows": len(df),
+            },
+            "plot_type": "line",
+            "line": {
+                "feature": col,
+                **line_data,
+            },
+        }
+        return result
+
+    # ── 常规模式（histogram / boxplot / pie） ──────────────────────────
     # 特征过滤
     if features:
         requested = [f.strip() for f in features.split(",")]
@@ -151,16 +328,17 @@ async def get_data_distributions(
         "dataset_info": {
             "rows": int(data_file.rows),
             "columns": len(df.columns),
-            "preview_rows": len(df)
+            "preview_rows": len(df),
         },
-        "plots": []
+        "plot_type": plot_type,
+        "plots": [],
     }
 
     for col in df.columns:
         col_data = df[col]
         stats = {
             "count": int(col_data.count()),
-            "missing": int(col_data.isna().sum())
+            "missing": int(col_data.isna().sum()),
         }
 
         if pd.api.types.is_numeric_dtype(col_data):
@@ -169,12 +347,13 @@ async def get_data_distributions(
                 "std": float(col_data.std()),
                 "min": float(col_data.min()),
                 "max": float(col_data.max()),
-                "median": float(col_data.median())
+                "median": float(col_data.median()),
             })
             if plot_type == "histogram":
                 stats["histogram"] = _histogram_data(col_data)
             elif plot_type == "boxplot":
                 stats["boxplot"] = _boxplot_data(col_data)
+            # pie 不适用于数值列
         else:
             # 类别型
             vc = col_data.value_counts()
@@ -183,13 +362,15 @@ async def get_data_distributions(
                 "top_values": [
                     {"value": str(k), "count": int(v)}
                     for k, v in vc.head(10).items()
-                ]
+                ],
             })
+            if plot_type == "pie":
+                stats["pie_image"] = _render_pie_chart(col_data)
 
         result["plots"].append({
             "feature": col,
             "dtype": str(col_data.dtype),
-            "stats": stats
+            "stats": stats,
         })
 
     # 相关性矩阵（当数值特征 >= 2 时）
