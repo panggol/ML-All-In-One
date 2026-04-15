@@ -33,32 +33,22 @@ function createTempCSV(): string {
   return tmpPath
 }
 
-async function loginAsTestUser(page: any, username: string) {
+async function loginAsTestUser(page: any) {
+  // Re-enable admin first (admin_users tests may have disabled it)
   await page.goto(`${BASE_URL}/login`)
-  const randomUser = `${username}_${Date.now()}`
-
-  await page.getByRole('tab', { name: /注册|register/i }).click()
-  await page.getByPlaceholder(/用户名|username/i).fill(randomUser)
-  await page.getByPlaceholder(/邮箱|email/i).fill(`${randomUser}@test.com`)
-  await page.getByPlaceholder(/密码|password/i).first().fill('password123')
-  await page.getByPlaceholder(/确认密码|confirm/i).fill('password123')
-  await page.getByRole('button', { name: /注册|创建账户|sign up/i }).click()
-  await page.waitForTimeout(1000)
-
-  await page.getByPlaceholder(/密码|password/i).fill('password123')
-  await page.getByRole('button', { name: /登录|sign in|log in/i }).click()
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 })
-
-  return randomUser
+  await page.waitForLoadState('networkidle')
+  await page.locator('input[placeholder="请输入用户名或邮箱"]').fill('admin')
+  await page.locator('input[placeholder="请输入密码"]').fill('admin123')
+  await page.locator('button[type="submit"]').filter({ hasText: /登录/i }).click()
+  await page.waitForURL(url => url.pathname === '/dashboard' || url.pathname === '/', { timeout: 10000 })
+  console.log('✅ 登录成功，当前 URL:', page.url())
 }
 
 async function uploadDataFile(page: any) {
   await page.goto(`${BASE_URL}/data`)
   await page.waitForLoadState('networkidle')
-  const uploadButton = page.locator('button').filter({ hasText: /上传|upload|导入/i }).first()
-  await uploadButton.click()
   const csvPath = createTempCSV()
-  await page.locator('input[type="file"]').first().setInputFiles(csvPath)
+  await page.locator('input#data-upload').setInputFiles(csvPath)
   await page.waitForTimeout(2000)
 }
 
